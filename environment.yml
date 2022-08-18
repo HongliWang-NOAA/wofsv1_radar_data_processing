@@ -1,0 +1,18 @@
+name: wofs-radar
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.6.10
+  - cartopy=0.17.0
+  - matplotlib=3.1.3
+  - matplotlib-base=3.1.3
+  - scipy=1.4.1
+  - netcdf4=1.5.3
+  - netcdftime=1.0.0a2
+  - pyproj=1.9.6
+  - arm_pyart=1.11.0
+  - pandas=1.0.1
+  - metpy=0.12.0
+  - basemap-data-hires=1.2.1
+  - future=0.18.2

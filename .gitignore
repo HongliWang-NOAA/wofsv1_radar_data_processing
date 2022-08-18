@@ -1,0 +1,12 @@
+RADAR/*
+
+*.pyc
+*.log
+*.error
+*.out
+*.png
+*.nc
+*.tgz
+
+out/
+data/
