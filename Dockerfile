@@ -17,7 +17,8 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     echo $PATH && \
     conda init bash
 
-COPY . /opt/wofs
+COPY ./wofs_radar /opt/wofs/wofs_radar
+COPY ./environment.yml /opt/wofs
 
 # override the RUN command to use --login, which will load profile scripts (bashrc) and make conda visible
 SHELL ["/bin/bash", "--login", "-c"]

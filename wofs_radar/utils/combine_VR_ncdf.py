@@ -3,7 +3,7 @@ import sys, os, glob
 import time
 import datetime as DT
 from optparse import OptionParser
-from ..Config import settings
+from ..Config import AppConfiguration
 import xarray as xr
 import netCDF4 as ncdf
 
@@ -124,6 +124,7 @@ def main(argv=None):
     (options, args) = parser.parse_args()
     
     if options.dir == None:
+        settings = AppConfiguration.get()
         options.dir = settings.opaws_obs_seq
 
     combine_from_pattern(options.file, options.dir)

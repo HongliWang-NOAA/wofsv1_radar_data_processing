@@ -1,8 +1,9 @@
 import types, os
-from ..Config import settings
+from ..Config import AppConfiguration
 from .mrms import run
 
-def run_vr_for_radar_time(start_time, radar):
+def run_vr_for_radar_time(start_time, radar, config_file: str):
+    settings = AppConfiguration.load(config_file)
 
     print(f'Processing radar {radar}')
 

@@ -783,7 +783,7 @@ def run(options):
    if options.thin > 1:
        _grid_dict['thin_grid'] = options.thin
       
-   if options.plot < 0:
+   if options.plot == False:
        plot_grid_flag = False
    else:
        sweep_num = options.plot

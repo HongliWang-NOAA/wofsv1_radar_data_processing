@@ -1,7 +1,7 @@
 import unittest
 import types, calendar, os, datetime
 from vr import run_vr_for_radar_time
-from Config import settings
+from Config import AppConfiguration
 from multiprocessing import Pool
 
 class test_vr(unittest.TestCase):
@@ -30,6 +30,7 @@ class test_vr(unittest.TestCase):
     #     run('KOHX', datetime.datetime(2020, 3, 3, 6, 15, 0), obj)
 
     def test_kohx(self):
+        settings = AppConfiguration.get()
 
         settings.default_grid_info = '../../wofs_radar/tests/data/TestMRMS_VR'
         settings.rass_input = '../../wofs_radar/tests/data/TestRASS'

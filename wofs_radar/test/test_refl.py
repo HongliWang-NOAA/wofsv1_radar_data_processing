@@ -1,11 +1,13 @@
 import unittest
 import types, calendar, os, datetime
 from refl import run_refl_for_radar_time
-from Config import settings
+from Config import AppConfiguration
 
 class test_refl(unittest.TestCase):
 
     def test_mrms_opaws(self):
+        settings = AppConfiguration.get()
+
         obj = types.SimpleNamespace()
         #obj.dname = settings.opaws_feed + '/KDMX'
         obj.out_dir = settings.opaws_obs_seq + '/20200302'

@@ -1,6 +1,8 @@
 from configparser import ConfigParser
 import warnings
 
+settings = None
+
 class AppConfiguration(object):  
     def __get_value__(self, val):
         v = val.lower().strip()
@@ -10,6 +12,18 @@ class AppConfiguration(object):
             return False
         else:
             return val
+
+    @staticmethod
+    def load(config_file: str):
+        global settings
+        if settings == None:
+            settings = AppConfiguration(config_file)
+        return settings
+
+    @staticmethod
+    def get(): 
+        global settings
+        return settings
 
     def __init__(self, *file_names):
         parser = ConfigParser()
@@ -32,5 +46,4 @@ class AppConfiguration(object):
     def load_rerun(self):
         print('Loading rerun settings...')
         self.__init__('app.rerun.cfg')
-
-settings = AppConfiguration('app.cfg', 'app.test.cfg')
+        

@@ -1,8 +1,7 @@
 import os
 import datetime as DT
 import logging
-from typing_extensions import LiteralString
-from .Config import settings
+from .Config import AppConfiguration
 from .vr import run_vr_for_radar_time
 from .refl import run_refl_for_radar_time
 from multiprocessing import Pool, TimeoutError
@@ -31,19 +30,25 @@ if __name__ == "__main__":
     #parser.add_option("-i", "--id",   dest="id", default = None)
     parser.add_option("-y", "--latitude",   dest="lat", default = None)
     parser.add_option("-x", "--longitude",   dest="lon", default = None)
+    parser.add_option("-f", "--file",   dest="file", default = None)
 
     (options, args) = parser.parse_args()
 
     run_time = DT.datetime.strptime(options.time, "%Y%m%d%H%M")
     radars = options.radars.split(',')
 
+    settings = AppConfiguration.load(options.file)
+
     with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
         refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
-        pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat)))
+        pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file))
+
+        # run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file)
         
         for name in radars:
             abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
-            pool.apply_async(abortable_func, args = (run_time, name))
+            pool.apply_async(abortable_func, args = (run_time, name, options.file))
+            # run_vr_for_radar_time(run_time, name, options.file)    
 
         pool.close()
         pool.join()   

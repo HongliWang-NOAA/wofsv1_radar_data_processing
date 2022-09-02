@@ -6,18 +6,19 @@ import datetime
 from pyart.config import FileMetadata
 from pyart.config import get_metadata
 from pyart.core.radar import Radar
-from ..Config import settings
+from ..Config import AppConfiguration
 from ..utils.SparseRadialSet import decompress_sparse
 
-def __get_radar_time_path__(radar, run_time): return os.path.join(settings.rass_input.format(run_time.strftime("%Y%m%d")), radar)
 
-def __get_path_reflectivity__(radar, run_time): return os.path.join(__get_radar_time_path__(radar, run_time), settings.rass_input_refl)
+def __get_radar_time_path__(radar, run_time, rass_input): return os.path.join(rass_input.format(run_time.strftime("%Y%m%d")), radar)
 
-def __get_path_reflectivity_tilt__(radar, run_time, tilt): return os.path.join(__get_path_reflectivity__(radar, run_time), tilt)
+def __get_path_reflectivity__(radar, run_time, rass_input, rass_input_refl): return os.path.join(__get_radar_time_path__(radar, run_time, rass_input), rass_input_refl)
 
-def __get_path_velocity__(radar, run_time): return os.path.join(__get_radar_time_path__(radar, run_time), settings.rass_input_vel)
+def __get_path_reflectivity_tilt__(radar, run_time, tilt, rass_input, rass_input_refl): return os.path.join(__get_path_reflectivity__(radar, run_time, rass_input, rass_input_refl), tilt)
 
-def __get_path_velocity_tilt__(radar, run_time, tilt): return os.path.join(__get_path_velocity__(radar, run_time), tilt)
+def __get_path_velocity__(radar, run_time, rass_input, rass_input_vel): return os.path.join(__get_radar_time_path__(radar, run_time, rass_input), rass_input_vel)
+
+def __get_path_velocity_tilt__(radar, run_time, tilt, rass_input, rass_input_vel): return os.path.join(__get_path_velocity__(radar, run_time, rass_input, rass_input_vel), tilt)
 
 def load_mrms_ppi(fdict, **kwargs):
     """
@@ -203,8 +204,10 @@ def getProducts(radar, run_time, tilt):
         [{'file': '/file/path.netcdf', 'ncvar': 'Velocity', 'pvar': 'corrected_velocity'},
         {'file': '/file/path.netcdf', 'ncvar': 'ReflectivityQC', 'pvar': "reflectivity"}]
     """
-    refl_path = __get_path_reflectivity_tilt__(radar, run_time, tilt)
-    vel_path = __get_path_velocity_tilt__(radar, run_time, tilt)
+    settings = AppConfiguration.get()
+
+    refl_path = __get_path_reflectivity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_refl)
+    vel_path = __get_path_velocity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_vel)
 
     def getNearestFile(time, files):
         win = int(settings.rass_window)
@@ -223,8 +226,10 @@ def getProducts(radar, run_time, tilt):
         yield {'file': os.path.join(refl_path, r[1]), 'variables': [{'ncvar': settings.rass_reflectivity_var, 'pvar': "reflectivity"}]}
 
 def getTiltProducts(radar, run_time):
-    refl_tilts = os.listdir(__get_path_reflectivity__(radar, run_time))
-    vel_tilts = os.listdir(__get_path_velocity__(radar, run_time))
+    settings = AppConfiguration.get()
+
+    refl_tilts = os.listdir(__get_path_reflectivity__(radar, run_time, settings.rass_input, settings.rass_input_refl))
+    vel_tilts = os.listdir(__get_path_velocity__(radar, run_time, settings.rass_input, settings.rass_input_vel))
     # common set of tilts 
     tilts = set(refl_tilts).intersection(vel_tilts)
     for tilt in [x for x in tilts if re.match(r"[0-9]+\.[0-9]+", x)]:

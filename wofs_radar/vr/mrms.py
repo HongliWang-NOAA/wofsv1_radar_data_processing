@@ -849,7 +849,7 @@ def run(radar, run_time, options):
     t0 = timeit.time()
 
     tilts = list(getRadarProducts(radar, run_time))
-    
+
     volumes = list(map(lambda a: a['radar'], sorted(tilts, key=lambda a: a['tilt'])))
 
     if len(volumes) <= 0:

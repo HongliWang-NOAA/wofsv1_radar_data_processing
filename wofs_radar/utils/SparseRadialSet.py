@@ -1,7 +1,7 @@
 import netCDF4 as nc
 import numpy as np
 import time
-from ..sparsey import sparse_decompress
+from .sparsey import sparse_decompress
 
 def decompress_sparse(a, method = 'f'):
     t0 = time.perf_counter()
