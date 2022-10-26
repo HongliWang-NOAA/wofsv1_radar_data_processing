@@ -16,3 +16,4 @@ dependencies:
   - metpy=0.12.0
   - basemap-data-hires=1.2.1
   - future=0.18.2
+  - pint=0.11
