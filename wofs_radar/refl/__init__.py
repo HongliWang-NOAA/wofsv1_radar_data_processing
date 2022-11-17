@@ -7,7 +7,7 @@ def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config
     settings = AppConfiguration.load(config_file)
 
     obj = types.SimpleNamespace()
-    obj.dir = os.path.join(settings.mrms_feed, start_time.strftime("%Y/%m/%d"))
+    obj.dir = os.path.join(settings.mrms_feed, start_time.strftime("%Y%m%d"), "MRMS")
     obj.realtime = start_time.strftime("%Y%m%d%H%M")
     obj.grep = '*.netcdf.gz'
     obj.write = True
