@@ -13,3 +13,7 @@ docker run --mount type=bind,source=$PWD,target=/opt/wofs --mount type=bind,sour
 
 Note: you must bind the current working directory so that the application can read your app.cfg file. You must also bind the data directory where input/output files reside.
 
+## Testing
+```
+python3 -m wofs_radar -t 202003030615 --longitude -94.5166 --latitude 33.465823 -r KOHX -f app.local.cfg
+```

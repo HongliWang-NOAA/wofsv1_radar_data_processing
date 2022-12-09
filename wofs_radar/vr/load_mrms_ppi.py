@@ -206,30 +206,43 @@ def getProducts(radar, run_time, tilt):
     """
     settings = AppConfiguration.get()
 
-    refl_path = __get_path_reflectivity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_refl)
-    vel_path = __get_path_velocity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_vel)
+    vr_files = list_abs_files(__get_path_velocity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_vel)) + list_abs_files(__get_path_velocity_tilt__(radar, run_time - datetime.timedelta(days = 1), tilt, settings.rass_input, settings.rass_input_vel))
+
+    refl_files = list_abs_files(__get_path_reflectivity_tilt__(radar, run_time, tilt, settings.rass_input, settings.rass_input_refl)) + list_abs_files(__get_path_reflectivity_tilt__(radar, run_time - datetime.timedelta(days = 1), tilt, settings.rass_input, settings.rass_input_refl))
 
     def getNearestFile(time, files):
         win = int(settings.rass_window)
         #TODO: clean this up. initial lambda should do the filter check and return None if beyond window for less looping
-        files = map(lambda x: (abs((time - datetime.datetime.strptime(os.path.splitext(x)[0], "%Y%m%d-%H%M%S")).total_seconds()), x), files)
+        files = map(lambda x: (abs((time - datetime.datetime.strptime(os.path.splitext(os.path.basename(x))[0], "%Y%m%d-%H%M%S")).total_seconds()), x), files)
         s = sorted(files, key = lambda x: x[0])
         s = list(filter(lambda x: x[0] <= win, s))
         return s[0] if len(s) > 0 else None
 
-    v = getNearestFile(run_time, os.listdir(vel_path))
+    v = getNearestFile(run_time, vr_files)
     if v is not None:
-        yield {'file': os.path.join(vel_path, v[1]), 'variables': [{'ncvar': 'Velocity', 'pvar': 'velocity'}]} #, {'ncvar': 'NyquistVelocity', 'pvar': 'nyquist_velocity'}
+        yield {'file': v[1], 'variables': [{'ncvar': 'Velocity', 'pvar': 'velocity'}]} #, {'ncvar': 'NyquistVelocity', 'pvar': 'nyquist_velocity'}
 
-    r = getNearestFile(run_time, os.listdir(refl_path))
+    r = getNearestFile(run_time, refl_files)
     if r is not None:
-        yield {'file': os.path.join(refl_path, r[1]), 'variables': [{'ncvar': settings.rass_reflectivity_var, 'pvar': "reflectivity"}]}
+        yield {'file': r[1], 'variables': [{'ncvar': settings.rass_reflectivity_var, 'pvar': "reflectivity"}]}
+
+def list_rel_files(path):
+    if os.path.exists(path):
+        return os.listdir(path)
+    else: return []
+
+def list_abs_files(path):
+    if os.path.exists(path):
+        return [os.path.join(path, a) for a in os.listdir(path)]
+    else: return []
 
 def getTiltProducts(radar, run_time):
     settings = AppConfiguration.get()
 
-    refl_tilts = os.listdir(__get_path_reflectivity__(radar, run_time, settings.rass_input, settings.rass_input_refl))
-    vel_tilts = os.listdir(__get_path_velocity__(radar, run_time, settings.rass_input, settings.rass_input_vel))
+    vel_tilts = list_rel_files(__get_path_velocity__(radar, run_time, settings.rass_input, settings.rass_input_vel)) + list_rel_files(__get_path_velocity__(radar, run_time - datetime.timedelta(days = 1), settings.rass_input, settings.rass_input_vel))
+
+    refl_tilts = list_rel_files(__get_path_reflectivity__(radar, run_time, settings.rass_input, settings.rass_input_refl)) + list_rel_files(__get_path_reflectivity__(radar, run_time - datetime.timedelta(days = 1), settings.rass_input, settings.rass_input_refl))
+
     # common set of tilts 
     tilts = set(refl_tilts).intersection(vel_tilts)
     for tilt in [x for x in tilts if re.match(r"[0-9]+\.[0-9]+", x)]:
