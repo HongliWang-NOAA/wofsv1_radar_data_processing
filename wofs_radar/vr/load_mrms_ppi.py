@@ -51,6 +51,8 @@ def load_mrms_ppi(fdict, **kwargs):
     n_elev  = []
     gates   = []
     
+    # print(f"length of {len(fdict)}")
+
     for n, d in enumerate(fdict):
         try:
             print('Loading file: ', d['file'])
@@ -114,38 +116,42 @@ def load_mrms_ppi(fdict, **kwargs):
         
         gwidth                     = ncfile.variables['GateWidth'][:].mean()        
 
-        if n == 0:  # do these things once
+        #if n == 0:  # do these things once
             
-            start_time                     = datetime.datetime.utcfromtimestamp(ncfile.Time)
-            _time['data']                  = np.array([ncfile.FractionalTime][:])
-            _time['units']                 = make_time_unit_str(start_time)
+        start_time                     = datetime.datetime.utcfromtimestamp(ncfile.Time)
+        _time['data']                  = np.array([ncfile.FractionalTime][:])
+        _time['units']                 = make_time_unit_str(start_time)
 
-            _latitude['data']              = ncfile.Latitude
-            _longitude['data']             = ncfile.Longitude
-            _altitude['data']              = np.array([ncfile.Height], 'float64')
-            
-            _range['data']                 = ncfile.RangeToFirstGate + ncfile.variables['GateWidth'][0] \
-                                           * (np.arange(_mygate-1) + 0.5)
-            _sweep_mode['data']            = np.array(['ppi'])
-            _azimuth['data']               = np.array(ncfile.variables['Azimuth'][:])
-            _fixed_angle['data']           = np.array(n_elev)
-            _elevation['data']             = np.array(n_rays[n]*[n_elev[n]])
+        _latitude['data']              = ncfile.Latitude
+        _longitude['data']             = ncfile.Longitude
+        _altitude['data']              = np.array([ncfile.Height], 'float64')
+        
+        _range['data']                 = ncfile.RangeToFirstGate + ncfile.variables['GateWidth'][0] \
+                                        * (np.arange(_mygate-1) + 0.5)
+        _sweep_mode['data']            = np.array(['ppi'])
+        _azimuth['data']               = np.array(ncfile.variables['Azimuth'][:])
+        _fixed_angle['data']           = np.array(n_elev)
+        _elevation['data']             = np.array(n_rays[n]*[n_elev[n]])
 
-            _sweep_number['data']          = np.arange(len(fdict), dtype='int32')
-            _sweep_start_ray_index['data'] = np.cumsum(np.append([0], n_rays[:-1]).astype('int32'))
-            _sweep_end_ray_index['data']   = np.cumsum(n_rays).astype('int32') - 1
+        _sweep_number['data']          = np.arange(len(fdict), dtype='int32')
+        _sweep_start_ray_index['data'] = np.cumsum(np.append([0], n_rays[:-1]).astype('int32'))
+        _sweep_end_ray_index['data']   = np.cumsum(n_rays).astype('int32') - 1
 
-            # copy meta data once
+        # copy meta data once
 
-            metadata_mapping = {
-                                'vcp-value': 'vcp-value',
-                                'radarName-value': 'instrument_name',
-                                }
+        metadata_mapping = {
+                            'vcp-value': 'vcp-value',
+                            'radarName-value': 'instrument_name',
+                            }
+        
+        # print(_range)
+        # print(_sweep_start_ray_index)
+        # print(_sweep_end_ray_index)
 
-            for netcdf_attr, metadata_key in metadata_mapping.items():
-                if netcdf_attr in ncfile.ncattrs():
-                    print(metadata_key, ncfile.getncattr(netcdf_attr))
-                    _metadata[metadata_key] = ncfile.getncattr(netcdf_attr)
+        for netcdf_attr, metadata_key in metadata_mapping.items():
+            if netcdf_attr in ncfile.ncattrs():
+                print(metadata_key, ncfile.getncattr(netcdf_attr))
+                _metadata[metadata_key] = ncfile.getncattr(netcdf_attr)
   
         # Okay do the big stuff.
         for varset in d['variables']:
