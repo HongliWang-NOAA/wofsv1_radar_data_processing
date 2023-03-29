@@ -8,7 +8,7 @@ ENV PATH="${CNDA}/bin:${PATH}"
 
 ENV PROJ_LIB="${CNDA}/share/proj" 
 
-RUN apt update && apt install -y wget unzip curl
+RUN apt update && apt install -y wget unzip curl bzip2
 
 # override the RUN command to use --login, which will load profile scripts (bashrc) and make conda visible
 SHELL ["/bin/bash", "--login", "-c"]
