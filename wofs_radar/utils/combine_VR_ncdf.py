@@ -1,4 +1,3 @@
-from netcdftime import utime
 import sys, os, glob
 import time
 import datetime as DT
@@ -8,8 +7,6 @@ import xarray as xr
 import netCDF4 as ncdf
 
 time_format = "%Y%m%d_%H:%M:%S"
-day_utime   = utime("days since 1601-01-01 00:00:00")
-sec_utime   = utime("seconds since 1970-01-01 00:00:00")
 
 
 def combine(input_files, output_file):                  

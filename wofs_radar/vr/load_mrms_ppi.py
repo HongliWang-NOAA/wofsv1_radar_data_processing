@@ -3,12 +3,16 @@ import os, re
 import numpy as np
 from pyart.io.common import make_time_unit_str
 import datetime
+import pyart
 from pyart.config import FileMetadata
 from pyart.config import get_metadata
 from pyart.core.radar import Radar
 from ..Config import AppConfiguration
 from ..utils.SparseRadialSet import decompress_sparse
+import matplotlib.pyplot as plt
 
+_debug_ = False
+_include_tilts = [] # empty list will plot all
 
 def __get_radar_time_path__(radar, run_time, rass_input): return os.path.join(rass_input.format(run_time.strftime("%Y%m%d")), radar)
 
@@ -19,6 +23,11 @@ def __get_path_reflectivity_tilt__(radar, run_time, tilt, rass_input, rass_input
 def __get_path_velocity__(radar, run_time, rass_input, rass_input_vel): return os.path.join(__get_radar_time_path__(radar, run_time, rass_input), rass_input_vel)
 
 def __get_path_velocity_tilt__(radar, run_time, tilt, rass_input, rass_input_vel): return os.path.join(__get_path_velocity__(radar, run_time, rass_input, rass_input_vel), tilt)
+
+def find_nearest_index(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
 
 def load_mrms_ppi(fdict, **kwargs):
     """
@@ -41,9 +50,6 @@ def load_mrms_ppi(fdict, **kwargs):
            tilts.  The data structure is not quite correct.
 
     """
-    
-    _debug = 0
-
     # Loop over files to find the dimensions of the data.
     
     n_gates = [1192]  # choose this to be the maximum number of gates we ever need.
@@ -52,30 +58,19 @@ def load_mrms_ppi(fdict, **kwargs):
     gates   = []
     
     # print(f"length of {len(fdict)}")
-
-    for n, d in enumerate(fdict):
-        try:
-            print('Loading file: ', d['file'])
-            ncfile = ncdf.Dataset(d['file'])
-        except IOError:
-            print('LOAD_PPI cannot open netCDF file: ', d['file'])
-            break
-            
-        n_gates.append(len(ncfile.dimensions['Gate']))
-        n_rays.append(len(ncfile.dimensions['Azimuth']))
-        n_elev.append(ncfile.Elevation)
-                
-        ncfile.close()  # important to do this.
         
-    _mygate = min(n_gates)
+    
 
-    if _debug > 0:
-        print(n_gates)
-        print('LOAD_PPI --> Number of files to read: %d' % len(fdict))
-        print('LOAD_PPI --> _mygate: %d' % _mygate)
+    # if _debug > 0:
+    #     print(n_gates)
+    #     print('LOAD_PPI --> Number of files to read: %d' % len(fdict))
+    #     print('LOAD_PPI --> _mygate: %d' % _mygate)
+    #     print(f'LOAD_PPI --> n_rays: {n_rays}')
+        
         
     # if we get this far, go ahead get to creating the radar object
-    
+
+
     # this does not do anything yet except uses the object to create other objects
     # the default configuration is cfradial - for later.
     
@@ -102,68 +97,87 @@ def load_mrms_ppi(fdict, **kwargs):
 
     _fields                = {}  # dict to hold data
 
-    _instr_params = {'nyquist_velocity': {'data': [ 0.0 ] }}
+
 
     # loop through files..
 
-    for n, d in enumerate(fdict):
-        try:
-            ncfile                     = ncdf.Dataset(d['file'])                      
-        except:
-            # TODO: implement better logging here
-            print('Failed to load radar file: %s' % d['file'])
-            continue
-        
-        gwidth                     = ncfile.variables['GateWidth'][:].mean()        
 
-        #if n == 0:  # do these things once
-            
-        start_time                     = datetime.datetime.utcfromtimestamp(ncfile.Time)
-        _time['data']                  = np.array([ncfile.FractionalTime][:])
-        _time['units']                 = make_time_unit_str(start_time)
+    refl = next(filter(lambda z: z['variables'][0]['ncvar'] == 'ReflectivityDPQCLight', fdict))
+    vel = next(filter(lambda z: z['variables'][0]['ncvar'] == 'Velocity', fdict))
 
-        _latitude['data']              = ncfile.Latitude
-        _longitude['data']             = ncfile.Longitude
-        _altitude['data']              = np.array([ncfile.Height], 'float64')
-        
-        _range['data']                 = ncfile.RangeToFirstGate + ncfile.variables['GateWidth'][0] \
-                                        * (np.arange(_mygate-1) + 0.5)
-        _sweep_mode['data']            = np.array(['ppi'])
-        _azimuth['data']               = np.array(ncfile.variables['Azimuth'][:])
-        _fixed_angle['data']           = np.array(n_elev)
-        _elevation['data']             = np.array(n_rays[n]*[n_elev[n]])
+    refl_file  = ncdf.Dataset(refl['file'])
+    vr_file  = ncdf.Dataset(vel['file'])
 
-        _sweep_number['data']          = np.arange(len(fdict), dtype='int32')
-        _sweep_start_ray_index['data'] = np.cumsum(np.append([0], n_rays[:-1]).astype('int32'))
-        _sweep_end_ray_index['data']   = np.cumsum(n_rays).astype('int32') - 1
+    # print(refl_file.variables['Azimuth'][:])
+    # print(vr_file.variables['Azimuth'][:])
+    # exit()
 
-        # copy meta data once
+    n_gates.append(len(vr_file.dimensions['Gate']))
+    n_rays.append(len(vr_file.dimensions['Azimuth']))
+    n_elev.append(vr_file.Elevation)
 
-        metadata_mapping = {
-                            'vcp-value': 'vcp-value',
-                            'radarName-value': 'instrument_name',
-                            }
-        
-        # print(_range)
-        # print(_sweep_start_ray_index)
-        # print(_sweep_end_ray_index)
+    _mygate = min(n_gates)
 
-        for netcdf_attr, metadata_key in metadata_mapping.items():
-            if netcdf_attr in ncfile.ncattrs():
-                print(metadata_key, ncfile.getncattr(netcdf_attr))
-                _metadata[metadata_key] = ncfile.getncattr(netcdf_attr)
-  
-        # Okay do the big stuff.
-        for varset in d['variables']:
+
+    start_time                     = datetime.datetime.utcfromtimestamp(vr_file.Time)
+    _time['data']                  = np.array([vr_file.FractionalTime][:])
+    _time['units']                 = make_time_unit_str(start_time)
+    _instr_params = {}
+    #_time['data']                 = np.array(ncfile.variables['RadialTime'][:]) 
+
+    _latitude['data']              = vr_file.Latitude
+    _longitude['data']             = vr_file.Longitude
+    _altitude['data']              = np.array([vr_file.Height], 'float64')
+    #print(_altitude['data'])
+    _range['data']                 = vr_file.RangeToFirstGate + vr_file.variables['GateWidth'][0] * (np.arange(_mygate-1) + 0.5)
+    #print(_range['data'])
+    _sweep_mode['data']            = np.array(['ppi'])
+    
+    _azimuth['data']               = np.array(vr_file.variables['Azimuth'][:])
+
+    _fixed_angle['data']           = np.array(n_elev)
+    _elevation['data']             = np.array(n_rays[0]*[n_elev[0]])
+
+    _sweep_number['data']          = np.arange(len(fdict), dtype='int32')
+
+    # print(_sweep_number['data']  )
+    _instr_params = {'nyquist_velocity': {'data': [float(vr_file.getncattr('Nyquist_Vel-value'))] }}
+
+    _sweep_start_ray_index['data'] = np.cumsum(np.append([0], n_rays[:-1]).astype('int32'))
+    _sweep_end_ray_index['data']   = np.cumsum(n_rays).astype('int32') - 1
+    
+    # copy meta data once
+
+    metadata_mapping = {
+                        'vcp-value': 'vcp-value',
+                        'radarName-value': 'instrument_name',
+                        }
+    
+    #print(ncfile.variables['Azimuth'][:])
+    # print(_range)
+    # print(_sweep_start_ray_index)
+    # print(_sweep_end_ray_index)
+
+    for netcdf_attr, metadata_key in metadata_mapping.items():
+        if netcdf_attr in vr_file.ncattrs():
+            print(metadata_key, vr_file.getncattr(netcdf_attr))
+            _metadata[metadata_key] = vr_file.getncattr(netcdf_attr)
+
+
+
+    def load_data(ncfile, vars, _fields, shift = None):
+        for varset in vars:
             pvar                       = varset['pvar']
             ncvar                      = varset['ncvar']
             _dict         = get_metadata(pvar)
 
             if ncfile.DataType[0:6] == 'Sparse':
-                decompressed = decompress_sparse(ncfile, method = d.get("decompression_method", "f"))
+                print(f"Loading as Sparse")
+                decompressed = decompress_sparse(ncfile, method = "f")
                 if decompressed is not None: _dict['data'] = np.ma.array(decompressed[:,0:_mygate-1])
                 else: continue
             else:
+                print(f"Loading as Other")
                 if len(ncfile.variables[ncvar].shape) == 2:
                     _dict['data'] = np.ma.array(ncfile.variables[ncvar][:,0:_mygate-1])
                 else: 
@@ -171,38 +185,58 @@ def load_mrms_ppi(fdict, **kwargs):
 
             if 'MissingData' in ncfile.ncattrs():
                 _dict['data'][_dict['data'] == ncfile.MissingData] = np.ma.masked
+
             if 'RangeFolded' in ncfile.ncattrs():
                 _dict['data'][_dict['data'] == ncfile.RangeFolded] = np.ma.masked
                 
             _dict['units'] = ncfile.getncattr('Unit-value')
 
-            if _debug > 299:
-                print(ncfile.variables[ncvar][:,0:_mygate-1].shape)
-                print(_dict['data'].shape)
+            #print(_dict['data'][:,0])
 
-            if pvar == 'velocity':
-                _instr_params = {'nyquist_velocity': {'data': [ncfile.getncattr('Nyquist_Vel-value')] }}
-            
+            if shift != None:
+                _dict['data'] = np.roll(_dict['data'], -1 * shift, 0)
+
+            #print(_dict['data'][:,0])
+
             _fields[pvar] = _dict
- 
+
+            #print(_dict['data'].shape)
+
+
+    target_index = find_nearest_index(vr_file.variables['Azimuth'][:], 0)
+
+    load_data(vr_file, vel['variables'], _fields)
+
+    rotate_index = find_nearest_index(refl_file.variables['Azimuth'][:], 0)
+
+    rotate_by = target_index - rotate_index
+
+    print(f"TARGET INDEX: {target_index}")
+    print(f"ROTATE INDEX: {rotate_index}")
+    print(f"ROTATE BY (TARGET-ROTATE): {rotate_by}")
+
+    load_data(refl_file, refl['variables'], _fields, rotate_by * -1)
+
+
     # With elevation and azimuth in the radar object, lets recalculate
     # gate latitude, longitude and altitude,
 
-    if _debug > 0:
+    if _debug_:
         print('LOAD_PPI:  Volume mean time:  ',start_time)
-    
-    if _debug > 100:
-        print('LOAD_PPI: final field dictionary: \n', _fields)
+        #print('LOAD_PPI: final field dictionary: \n', _fields.shape)
         print('LOAD_PPI: ngates.shape: ', _range['data'].shape)
         print('LOAD_PPI: nrays.shape: ', _azimuth['data'].shape)
         print('LOAD_PPI: sweep_start/stop: ', _sweep_start_ray_index['data'], _sweep_end_ray_index['data'])
         print('LOAD_PPI: sweeps: ', _sweep_number['data'])
     
-    return Radar( _time, _range, _fields, _metadata, _scan_type,                    \
+
+    r = Radar( _time, _range, _fields, _metadata, _scan_type,                    \
                   _latitude, _longitude, _altitude,                                 \
                   _sweep_number, _sweep_mode, _fixed_angle, _sweep_start_ray_index, \
                   _sweep_end_ray_index,                                              \
                   _azimuth, _elevation, instrument_parameters=_instr_params)
+    
+    return r
 
 def getProducts(radar, run_time, tilt):
     """
@@ -231,6 +265,7 @@ def getProducts(radar, run_time, tilt):
     r = getNearestFile(run_time, refl_files)
     if r is not None:
         yield {'file': r[1], 'variables': [{'ncvar': settings.rass_reflectivity_var, 'pvar': "reflectivity"}]}
+        
 
 def list_rel_files(path):
     if os.path.exists(path):
@@ -254,8 +289,13 @@ def getTiltProducts(radar, run_time):
     for tilt in [x for x in tilts if re.match(r"[0-9]+\.[0-9]+", x)]:
         yield { "tilt": tilt, "files": list(getProducts(radar, run_time, tilt)) }
 
-def getRadarProducts(radar, run_time):
+def getRadarProducts(radar, run_time, debug = False):
+    _debug_ = debug
+
     for fileset in getTiltProducts(radar, run_time):
+
+        if len(_include_tilts) > 0 and fileset['tilt'] not in _include_tilts:
+            continue
 
         # cannot process vr without reflectivity
         if len(fileset['files']) < 2: 
@@ -264,4 +304,33 @@ def getRadarProducts(radar, run_time):
         myradar = load_mrms_ppi(fileset['files'])
         myradar.init_gate_altitude()
         myradar.init_gate_longitude_latitude()
+
+        if _debug_ == True:
+            try:
+                fig = plt.figure(figsize=[8, 16])
+                ax = plt.subplot(2, 1, 1)
+                display = pyart.graph.RadarMapDisplay(myradar)
+                display.plot_ppi_map(
+                    "reflectivity",
+                    sweep=0,
+                    resolution="50m",
+                )
+
+                rt = run_time.strftime("%Y%m%d_%H%M")
+                tilt = fileset['tilt']
+
+                ax2 = plt.subplot(2, 1, 2)
+                display = pyart.graph.RadarMapDisplay(myradar)
+                display.plot_ppi_map(
+                    "velocity",
+                    sweep=0,
+                    resolution="50m",
+                    cmap="pyart_balance",
+                )
+                plt.savefig(f'{radar}_{tilt}_{rt}.png')
+            except:
+                print(f"Could not plot {radar}_{tilt}_{rt}.png")
+                continue
+
+
         yield { "tilt": fileset['tilt'], "radar": myradar }

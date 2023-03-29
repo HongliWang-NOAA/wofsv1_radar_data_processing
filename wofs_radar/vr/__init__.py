@@ -24,4 +24,5 @@ def run_vr_for_radar_time(start_time, radar, config_file: str):
     obj.shapefiles = None
     obj.interactive = None
     obj.write_dart = settings.rass_write_dart
+    obj.debug = settings.default_debug
     run(radar, start_time, obj)
