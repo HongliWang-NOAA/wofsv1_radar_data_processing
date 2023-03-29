@@ -29,7 +29,7 @@ RUN curl micro.mamba.pm/install.sh | bash && \
     /root/.local/bin/micromamba env create --file /opt/wofs/environment.yml 
 
 RUN micromamba activate wofs-radar && \
-    conda run -n wofs-radar python setup.py bdist_wheel && \
+    micromamba run -n wofs-radar python setup.py bdist_wheel && \
     bash install.sh && \
     rm -r wofs_radar && \
     echo "micromamba activate wofs-radar" >> ~/.bashrc
