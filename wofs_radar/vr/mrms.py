@@ -839,8 +839,8 @@ def run(radar, run_time, options):
 
     if options.plot == None:
         sweep_num = []
-    elif options.plot >= 0:
-        sweep_num = [options.plot]
+    elif ',' in options.plot:
+        sweep_num = list(map(lambda z: int(z), options.plot.split(','))) 
     else:
         sweep_num = _plevels
 

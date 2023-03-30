@@ -113,6 +113,7 @@ def load_mrms_ppi(fdict, **kwargs):
     # exit()
 
     n_gates.append(len(vr_file.dimensions['Gate']))
+    n_gates.append(len(refl_file.dimensions['Gate']))
     n_rays.append(len(vr_file.dimensions['Azimuth']))
     n_elev.append(vr_file.Elevation)
 
@@ -202,6 +203,8 @@ def load_mrms_ppi(fdict, **kwargs):
 
             #print(_dict['data'].shape)
 
+    # sometimes the gates do not match, use the min available
+    print(f"MIN GATES: {_mygate}")
 
     target_index = find_nearest_index(vr_file.variables['Azimuth'][:], 0)
 
@@ -216,7 +219,6 @@ def load_mrms_ppi(fdict, **kwargs):
     print(f"ROTATE BY (TARGET-ROTATE): {rotate_by}")
 
     load_data(refl_file, refl['variables'], _fields, rotate_by * -1)
-
 
     # With elevation and azimuth in the radar object, lets recalculate
     # gate latitude, longitude and altitude,
@@ -330,7 +332,5 @@ def getRadarProducts(radar, run_time, debug = False):
                 plt.savefig(f'{radar}_{tilt}_{rt}.png')
             except:
                 print(f"Could not plot {radar}_{tilt}_{rt}.png")
-                continue
-
 
         yield { "tilt": fileset['tilt'], "radar": myradar }

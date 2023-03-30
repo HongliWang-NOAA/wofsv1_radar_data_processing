@@ -14,7 +14,7 @@ def run_vr_for_radar_time(start_time, radar, config_file: str):
     obj.window = start_time.strftime("%Y,%m,%d,%H,%M")
     obj.onlyVR = settings.rass_onlyvr
     if (settings.rass_plot != ""):
-        obj.plot = int(settings.rass_plot)  
+        obj.plot = settings.rass_plot 
     else:
         obj.plot = None
     obj.dx = float(settings.rass_dx)
