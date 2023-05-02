@@ -47,7 +47,7 @@ if __name__ == "__main__":
         
         for name in radars:
             abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
-            pool.apply_async(abortable_func, args = (run_time, name, options.file))
+            pool.apply_async(abortable_func, args = (run_time, name, float(options.lon), float(options.lat), options.file))
             # run_vr_for_radar_time(run_time, name, options.file)    
 
         pool.close()
