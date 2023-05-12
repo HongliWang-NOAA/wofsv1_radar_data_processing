@@ -58,7 +58,8 @@ if __name__ == "__main__":
 
     try:
         #Shrink image size with pngquant.            
-        cmd = f"/usr/bin/pngquant --ext .png -f *.png"
+        cmd = f"/usr/bin/pngquant --ext .png -f {settings.rass_output}/**/*.png"
+        print(f"Running command: {cmd}")
         os.system(cmd)
     except:
         raise OSError('Unable to compress the PNG file. Check that pngquant is installed!')
