@@ -56,4 +56,11 @@ if __name__ == "__main__":
     __abortable_worker__(combine_from_pattern, '_VR_%s.nc' % run_time.strftime("%Y%m%d_%H%M"), 
         os.path.join(settings.rass_output, run_time.strftime("%Y%m%d")), timeout=360)
 
+    try:
+        #Shrink image size with pngquant.            
+        cmd = f"/usr/bin/pngquant --ext .png -f *.png"
+        os.system(cmd)
+    except:
+        raise OSError('Unable to compress the PNG file. Check that pngquant is installed!')
+
     print("\n Processing VR/REFL for time %s finished at %s" % (run_time, DT.datetime.utcnow().strftime("%H:%M:%S")))    
