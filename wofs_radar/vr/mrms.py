@@ -93,6 +93,10 @@ _vr_scale  = (-50.,50.)
 # Need for Lambert conformal (default) coordinate projection
 truelat1, truelat2 = 30.0, 60.0
 
+# Grid stuff
+NX = 172  # changed from 400 to leave a 20 km ring inside domain
+NY = 150
+
 # Parameter dict for Gridding
 _grid_dict = {
               'grid_spacing_xy' : 5000.,         # meters
@@ -244,7 +248,7 @@ def dbz_masking(ref, thin_zeros=2):
             
     return ref
 
-def vel_masking(vel, ref):
+def vel_masking(vel, ref, cloc=None):
     """
         VR Masking
     """
@@ -270,6 +274,25 @@ def vel_masking(vel, ref):
         mask2 = vel.data.mask
         vel.data.mask = np.logical_or(mask1, mask2)
         print(" Size of VR mask after height mask: %d" % np.sum(vel.data.mask == False))
+        
+    # Add buffer near domain edges
+    if cloc != None:
+        grid_spacing_xy = _grid_dict['grid_spacing_xy']/1000.
+        eln = cloc[1] + np.float(NX)*0.5*0.01*grid_spacing_xy
+        wln = cloc[1] - np.float(NX)*0.5*0.01*grid_spacing_xy
+        nlt = cloc[0] + np.float(NY)*0.5*0.01*grid_spacing_xy
+        slt = cloc[0] - np.float(NY)*0.5*0.01*grid_spacing_xy
+        lon_2d, lat_2d = np.meshgrid(vel.lons, vel.lats)
+        emask = lon_2d > eln
+        wmask = lon_2d < wln
+        nmask = lat_2d > nlt
+        smask = lat_2d < slt
+        for m in np.arange(vel.data.shape[0]):
+            vel.data.mask[m] = np.logical_or(emask, vel.data.mask[m])
+            vel.data.mask[m] = np.logical_or(wmask ,vel.data.mask[m])
+            vel.data.mask[m] = np.logical_or(smask, vel.data.mask[m])
+            vel.data.mask[m] = np.logical_or(nmask, vel.data.mask[m])
+        print(" Size of VR mask after domain edge buffer mask: %d" % np.sum(vel.data.mask == False)) 
         
     return vel
 
@@ -862,7 +885,7 @@ def run(radar, run_time, options):
     # Mask it off based on dictionary parameters set at top
 
     if _grid_dict['mask_vr_with_dbz']:
-        vel = vel_masking(vel, ref)
+        vel = vel_masking(vel, ref, options.loc)
 
     print("\n Time for gridding fields: {} seconds".format(timeit.time() - t0))
     
@@ -922,6 +945,9 @@ if __name__ == "__main__":
 
    parser.add_option("-p", "--plot",      dest="plot",      default=0,  type="int",      \
            help = "Specify a number between 0 and # elevations to plot ref and vr in that co-plane")
+    
+   parser.add_option(     "--loc",      dest="loc",  type="float", default=None, nargs = 2,      \
+           help = "Specify location of WoFS grid center (lat,lon)") 
                      
    parser.add_option("-i", "--interactive", dest="interactive", default=False,  action="store_true",     \
            help = "Boolean flag to specify to plot image to screen (when plot > -1).")  

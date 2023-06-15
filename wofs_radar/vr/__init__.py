@@ -2,7 +2,7 @@ import types, os
 from ..Config import AppConfiguration
 from .mrms import run
 
-def run_vr_for_radar_time(start_time, radar, config_file: str):
+def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file: str):
     settings = AppConfiguration.load(config_file)
 
     print(f'Processing radar {radar}')
@@ -17,6 +17,7 @@ def run_vr_for_radar_time(start_time, radar, config_file: str):
         obj.plot = settings.rass_plot 
     else:
         obj.plot = None
+    obj.loc = [lat, lon]
     obj.dx = float(settings.rass_dx)
     obj.roi = float(settings.rass_roi)
     obj.newse = None
