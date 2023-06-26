@@ -83,9 +83,10 @@ _debug = True
 _grid_dict = {
               'zero_dbz_obtype' : True,
               'thin_zeros'      : 3,
-              'halo_footprint'  : 4,
+              'halo_footprint'  : 5,
+              'vert_halo_fp'    : 1,
               'max_height'      : 10000.,
-              'zero_levels'     : [3010.,7010.], 
+              'zero_levels'     : [3000.,7000.], 
               'min_dbz_analysis': 15.0,
               'min_dbz_zeros'   : 15.0,
               'reflectivity'    : 7.0,
@@ -341,34 +342,46 @@ def assemble_3D_grid(filenames, loc=None, debug=False):
 # DBZ Mask
 
 def dbz_masking(ref, thin_zeros=2):
-
+   
    nz, ny, nx = ref.data.shape
   
 # First create zeros
- 
-   zeros = np.ones((ny, nx), dtype=np.float32)
+   zgo = _grid_dict['zero_levels']
+   nzo = len(zgo)
+   zeros = np.ones((nzo, ny, nx), dtype=np.float32)
 
    zero_dbz = np.ma.masked_where(zeros == 1.0, zeros)
    
    print(" Initial number of zeros in the field:  %d\n " % (np.sum(zero_dbz.mask==False)))
    
    if thin_zeros > 0:
-      zero_dbz.data[::thin_zeros, ::thin_zeros] = 0.0       # Here is where the thinned number of zeros is created
-      zero_dbz.mask[::thin_zeros, ::thin_zeros] = False     # because where mask == False, we have a zero...
+      zero_dbz.data[:,::thin_zeros, ::thin_zeros] = 0.0       # Here is where the thinned number of zeros is created
+      zero_dbz.mask[:,::thin_zeros, ::thin_zeros] = False     # because where mask == False, we have a zero...
 
    print(" Number of zeros in the field after thining:  %d\n " % (np.sum(zero_dbz.mask==False)))
-   
-   ref.composite = ref.data.data.max(axis=0)
-   
-   zero_dbz.mask[ ref.composite > _grid_dict['min_dbz_zeros'] ] = True
+
+   ref.composite = ref.data.data
+   ref.temp = zeros
+
+   for ko in np.arange(nzo):
+      for kr in np.arange(nz):
+         if zgo[ko] == ref.zg[kr]:
+            ref.temp[ko,:,:] = ref.data.data[kr,:,:]
+
+   zero_dbz.mask[ ref.temp > _grid_dict['min_dbz_zeros'] ] = True
 
    print(" Number of zeros in the field after compositive ref mask:  %d\n " % (np.sum(zero_dbz.mask==False)))
-      
+   
    raw_field = np.where(ref.composite < _grid_dict['min_dbz_zeros'], 0.0, ref.composite)
-     
-   max_neighbor = (ndimage.maximum_filter(raw_field, size=_grid_dict['halo_footprint']) > 0.1)
-     
-   zero_dbz.mask[max_neighbor == True] = True
+
+   hhalo = _grid_dict['halo_footprint']
+   vhalo = _grid_dict['vert_halo_fp']
+   max_neighbor = (ndimage.maximum_filter(raw_field, size=(vhalo,hhalo,hhalo)) > 0.1)
+
+   for ko in np.arange(nzo):
+      for kr in np.arange(nz):
+         if zgo[ko] == ref.zg[kr]:
+            zero_dbz.mask[ko][max_neighbor[kr] == True] = True
 
    print(" Number of zeros in the field after halo:  %d\n " % (np.sum(zero_dbz.mask==False)))
    
@@ -676,7 +689,7 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
            new_hgts[n]     = hgts[n]
        
        for n, lvl in enumerate(zero_levels):
-           new_data[nz+n] = field.zero_dbz.data
+           new_data[nz+n,...] = field.zero_dbz.data[n]
            new_hgts[nz+n] = lvl
            
        data = new_data
