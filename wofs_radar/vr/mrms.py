@@ -49,6 +49,7 @@ import netCDF4 as ncdf
 import pandas as pd
 import metpy.calc as mpcalc
 from metpy.units import units
+import math
 
 from ..utils.cressman import *
 
@@ -112,6 +113,8 @@ _grid_dict = {
               'thin_zeros'      : 4,
               'halo_footprint'  : 3,
               'nthreads'        : 1,
+              'ns_radius'       : 421.0,
+              'ew_radius'       : 411.0,
               'max_height'      : 10000.,
               'MRMS_zeros'      : [True,      6000.], # True: creates a single level of zeros where composite DBZ < _dbz_min
               'model_grid_size' : [900000., 900000.]  # Used to create a common grid for all observations (special option) 
@@ -295,6 +298,36 @@ def vel_masking(vel, ref, cloc=None):
         print(" Size of VR mask after domain edge buffer mask: %d" % np.sum(vel.data.mask == False)) 
         
     return vel
+
+#=========================================================================================
+# Calculate lat-lon given distance and center lat-lon
+def get_end_point(latitude, longitude, distance, bearing):
+    # Earth's radius in kilometers
+    radius = 6371.0
+
+    # Convert the latitude and longitude to radians
+    lat1 = math.radians(latitude)
+    lon1 = math.radians(longitude)
+
+    # Convert the bearing to radians
+    rad_bearing = math.radians(bearing)
+
+    # Calculate the angular distance
+    angular_distance = distance / radius
+
+    # Calculate the latitude of the destination point
+    lat2 = math.asin(math.sin(lat1) * math.cos(angular_distance) +
+                     math.cos(lat1) * math.sin(angular_distance) * math.cos(rad_bearing))
+
+    # Calculate the longitude of the destination point
+    lon2 = lon1 + math.atan2(math.sin(rad_bearing) * math.sin(angular_distance) * math.cos(lat1),
+                             math.cos(angular_distance) - math.sin(lat1) * math.sin(lat2))
+
+    # Convert the latitude and longitude back to degrees
+    lat2 = math.degrees(lat2)
+    lon2 = math.degrees(lon2)
+
+    return lat2, lon2
 
 def grid_data(volumes, field, LatLon=None):
     """
