@@ -41,6 +41,7 @@ import scipy.ndimage as ndimage
 from optparse import OptionParser
 from matplotlib.offsetbox import AnchoredText
 import netCDF4 as ncdf
+import math
 
 from pyart.graph import cm
 import datetime as DT
@@ -85,6 +86,8 @@ _grid_dict = {
               'thin_zeros'      : 3,
               'halo_footprint'  : 5,
               'vert_halo_fp'    : 1,
+              'ns_radius'       : 421.0,
+              'ew_radius'       : 411.0,
               'max_height'      : 10000.,
               'zero_levels'     : [3000.,7000.], 
               'min_dbz_analysis': 15.0,
@@ -341,7 +344,7 @@ def assemble_3D_grid(filenames, loc=None, debug=False):
 #=========================================================================================
 # DBZ Mask
 
-def dbz_masking(ref, thin_zeros=2):
+def dbz_masking(ref, thin_zeros=2, cloc=None):
    
    nz, ny, nx = ref.data.shape
   
@@ -400,8 +403,63 @@ def dbz_masking(ref, thin_zeros=2):
        mask1         = (zg3d > _grid_dict['max_height'])  
        mask2         = ref.data.mask
        ref.data.mask = np.logical_or(mask1, mask2)
+
+   if cloc != None:
+       eln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],90.0)
+       wln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],270.0)
+       nlt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],0.0)
+       slt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],180.0)
+       lon_2d, lat_2d = np.meshgrid(ref.lons, ref.lats)
+       emask = lon_2d > eln[1]
+       wmask = lon_2d < wln[1]
+       nmask = lat_2d > nlt[0]
+       smask = lat_2d < slt[0]
+
+       for m in np.arange(ref.data.shape[0]):
+           ref.data.mask[m] = np.logical_or(emask, ref.data.mask[m])
+           ref.data.mask[m] = np.logical_or(wmask, ref.data.mask[m])
+           ref.data.mask[m] = np.logical_or(smask, ref.data.mask[m])
+           ref.data.mask[m] = np.logical_or(nmask, ref.data.mask[m])
+
+       for m in np.arange(ref.zero_dbz.data.shape[0]):
+           ref.zero_dbz.data.mask[m] = np.logical_or(emask, ref.zero_dbz.data.mask[m])
+           ref.zero_dbz.data.mask[m] = np.logical_or(wmask, ref.zero_dbz.data.mask[m])
+           ref.zero_dbz.data.mask[m] = np.logical_or(smask, ref.zero_dbz.data.mask[m])
+           ref.zero_dbz.data.mask[m] = np.logical_or(nmask, ref.zero_dbz.data.mask[m])
+
+   print(" Size of REF mask after domain edge buffer mask: %d" % np.sum(ref.data.mask == False))
         
    return ref
+
+#=========================================================================================
+# Calculate lat-lon given distance and center lat-lon
+def get_end_point(latitude, longitude, distance, bearing):
+    # Earth's radius in kilometers
+    radius = 6371.0
+
+    # Convert the latitude and longitude to radians
+    lat1 = math.radians(latitude)
+    lon1 = math.radians(longitude)
+
+    # Convert the bearing to radians
+    rad_bearing = math.radians(bearing)
+
+    # Calculate the angular distance
+    angular_distance = distance / radius
+
+    # Calculate the latitude of the destination point
+    lat2 = math.asin(math.sin(lat1) * math.cos(angular_distance) +
+                     math.cos(lat1) * math.sin(angular_distance) * math.cos(rad_bearing))
+
+    # Calculate the longitude of the destination point
+    lon2 = lon1 + math.atan2(math.sin(rad_bearing) * math.sin(angular_distance) * math.cos(lat1),
+                             math.cos(angular_distance) - math.sin(lat1) * math.sin(lat2))
+
+    # Convert the latitude and longitude back to degrees
+    lat2 = math.degrees(lat2)
+    lon2 = math.degrees(lon2)
+
+    return lat2, lon2
 
 ###########################################################################################
 #
@@ -805,7 +863,7 @@ def run(options):
    ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug)
    ref_obj.time = a_time
 
-   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'])
+   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], cloc=options.loc)
 
    if options.write == True:  
    
