@@ -29,7 +29,7 @@ def find_nearest_index(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx
 
-def load_mrms_ppi(fdict, **kwargs):
+def load_mrms_ppi(fdict, input_refl, input_vel, **kwargs):
     """
     Read multiple field sweeps from an MRMS radar file NetCDF file.
     
@@ -102,8 +102,8 @@ def load_mrms_ppi(fdict, **kwargs):
     # loop through files..
 
 
-    refl = next(filter(lambda z: z['variables'][0]['ncvar'] == 'ReflectivityDPQCLight', fdict))
-    vel = next(filter(lambda z: z['variables'][0]['ncvar'] == 'Velocity', fdict))
+    refl = next(filter(lambda z: z['variables'][0]['ncvar'] == input_refl, fdict))
+    vel = next(filter(lambda z: z['variables'][0]['ncvar'] == input_vel, fdict))
 
     refl_file  = ncdf.Dataset(refl['file'])
     vr_file  = ncdf.Dataset(vel['file'])
@@ -291,7 +291,7 @@ def getTiltProducts(radar, run_time):
     for tilt in [x for x in tilts if re.match(r"[0-9]+\.[0-9]+", x)]:
         yield { "tilt": tilt, "files": list(getProducts(radar, run_time, tilt)) }
 
-def getRadarProducts(radar, run_time, debug = False):
+def getRadarProducts(radar, run_time, debug = False, input_refl = 'ReflectivityDPQCLight', input_vel = 'Velocity'):
     _debug_ = debug
 
     for fileset in getTiltProducts(radar, run_time):
@@ -303,7 +303,7 @@ def getRadarProducts(radar, run_time, debug = False):
         if len(fileset['files']) < 2: 
             continue
 
-        myradar = load_mrms_ppi(fileset['files'])
+        myradar = load_mrms_ppi(fileset['files'], input_refl, input_vel)
         myradar.init_gate_altitude()
         myradar.init_gate_longitude_latitude()
 

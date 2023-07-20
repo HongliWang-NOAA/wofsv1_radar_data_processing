@@ -13,6 +13,7 @@ def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config
     obj.write = True
     obj.out_dir = settings.mrms_obs_seq
     obj.plot = settings.mrms_plot
+    obj.refl_var_name = settings.mrms_refl_var_name
     obj.loc = [lat, lon]
     obj.thin = 1    
     run(obj)

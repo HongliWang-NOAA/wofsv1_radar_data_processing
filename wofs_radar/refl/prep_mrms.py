@@ -63,7 +63,7 @@ _plot_format = 'png'
 
 # Radar information
 
-_dbz_name         = "MergedReflectivityQC_smoothed"
+
 _temp_netcdf_file = "./tmp.nc"
 
 # Grid stuff
@@ -237,7 +237,7 @@ def get_dir_files(dir, pattern, debug=False):
 #=========================================================================================
 # Get the filenames out of the directory
 
-def assemble_3D_grid(filenames, loc=None, debug=False):
+def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflectivityQC_smoothed"):
 
     levels = _grid_dict['levels']
     nlvls  = len(levels)
@@ -323,9 +323,9 @@ def assemble_3D_grid(filenames, loc=None, debug=False):
         g_heights[n] = f.Height    
         
         try:
-            array[n,...] = f.variables[_dbz_name][0,j0:j1,i0:i1]
+            array[n,...] = f.variables[dbz_name][0,j0:j1,i0:i1]
         except:
-            array[n,...] = f.variables[_dbz_name][j0:j1,i0:i1]
+            array[n,...] = f.variables[dbz_name][j0:j1,i0:i1]
          
         f.close()
 
@@ -860,7 +860,7 @@ def run(options):
    out_filename = os.path.join(out_path, out_filename)
 
 
-   ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug)
+   ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name)
    ref_obj.time = a_time
 
    ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], cloc=options.loc)

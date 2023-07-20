@@ -9,6 +9,8 @@ def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file
 
     obj = types.SimpleNamespace()
     obj.dname = os.path.join(settings.rass_input.format(start_time.strftime("%Y%m%d")), radar)
+    obj.input_refl = settings.rass_input_refl
+    obj.input_vel = settings.rass_input_vel
     obj.out_dir = settings.rass_output
     obj.write = settings.rass_write
     obj.window = start_time.strftime("%Y,%m,%d,%H,%M")
