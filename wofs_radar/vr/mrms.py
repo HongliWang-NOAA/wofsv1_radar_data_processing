@@ -585,7 +585,7 @@ def plot_gridded(ref, vel, sweep, fsuffix=None, dir=".", shapefiles=None, intera
         filename = "%s_%2.2d.png" % (os.path.join(dir, fsuffix), sweep)
         print("\n opaws2D.grid_plot:  Writing plot to %s" % filename)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, figsize=(14,10))
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharey=True, figsize=(10,18))
     
     # Set up coordinates for the plots
 
@@ -695,7 +695,7 @@ def plot_gridded(ref, vel, sweep, fsuffix=None, dir=".", shapefiles=None, intera
     time_start = ncdf.num2date(ref.time['data'][0], ref.time['units'])
     time_text = time_start.isoformat().replace("T"," ")
     title = '\nDate:  %s   Time:  %s Z   Elevation:  %2.2f deg' % (time_text[0:10], time_text[10:19], ref.elevations[sweep])
-    plt.suptitle(title, fontsize=24)
+    plt.suptitle(title, fontsize=14)
     
     plt.savefig(filename)
     

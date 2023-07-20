@@ -532,7 +532,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
   else:
        filename = "%s.%s" % (plot_filename, _plot_format)
 
-  fig, axes = plt.subplots(1, 2, sharey=True, figsize=(18,10))
+  fig, axes = plt.subplots(2, 1, sharey=True, figsize=(10,18))
 
 # Set up coordinates for the plots
 
@@ -604,7 +604,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
 
   title = '\nDate:  %s   Time:  %s' % (time_text[0:10], time_text[10:19])
 
-  plt.suptitle(title, fontsize=18)
+  plt.suptitle(title, fontsize=14)
 
   plt.savefig(filename)
 
