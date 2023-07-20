@@ -557,7 +557,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
   im1 = bgmap.contourf(xg, yg, ref_data, levels= _ref_scale, cmap=cmapr, norm=normr, \
                        vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[0])
 
-  cbar = bgmap.colorbar(im1,location='bottom')
+  cbar = bgmap.colorbar(im1,location='right')
   cbar.set_label('Reflectivity (dBZ)')
   axes[0].set_title('Reflectivity at Height:  %4.1f km' % (0.001*ref.zg[sweep]))
   at = AnchoredText("Max dBZ: %4.1f" % (ref_data.max()), loc=4, prop=dict(size=10), frameon=True,)
