@@ -53,12 +53,14 @@ if __name__ == "__main__":
         pool.close()
         pool.join()   
     
+    output_dir = settings.rass_output.format(run_time.strftime("%Y%m%d"))
+
     __abortable_worker__(combine_from_pattern, '_VR_%s.nc' % run_time.strftime("%Y%m%d_%H%M"), 
-        os.path.join(settings.rass_output, run_time.strftime("%Y%m%d")), timeout=360)
+        os.path.join(output_dir, run_time.strftime("%Y%m%d")), timeout=360)
 
     try:
         #Shrink image size with pngquant.            
-        cmd = f"/usr/bin/pngquant --ext .png -f {settings.rass_output}/**/*.png"
+        cmd = f"/usr/bin/pngquant --ext .png -f {output_dir}/**/*.png"
         print(f"Running command: {cmd}")
         os.system(cmd)
     except:
