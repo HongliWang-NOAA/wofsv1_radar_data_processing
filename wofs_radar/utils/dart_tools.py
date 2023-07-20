@@ -552,7 +552,7 @@ def mrms_write_DART_ascii(obs, filename=None, obs_error=None, zero_dbz_obtype=_z
                 new_hgts[n]     = hgts[n]
             
             for n, lvl in enumerate(zero_levels):
-                new_data[nz+n] = obs.zero_dbz.data
+                new_data[nz+n] = obs.zero_dbz.data[n]
                 new_hgts[nz+n] = lvl
                 
             data = new_data

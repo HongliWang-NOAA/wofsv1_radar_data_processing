@@ -454,7 +454,7 @@ def plot_shapefiles(map, shapefiles=None, color='k', linewidth=0.5, ax=None, \
 #
 # Create processed reflectivity data  
 
-def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False, debug=False):
+def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False, cntrpoint=[0,0]):
   
 # Set up colormaps 
 
@@ -478,35 +478,14 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
 
 # Set up coordinates for the plots
 
-  sw_lon = ref.lons.min()
-  ne_lon = ref.lons.max()
-  sw_lat = ref.lats.min()
-  ne_lat = ref.lats.max()
-
   ref_data = ref.data[sweep]
-  ny, nx = ref_data.shape
 
-  bgmap = Basemap(projection='lcc', llcrnrlon=sw_lon,llcrnrlat=sw_lat,urcrnrlon=ne_lon,urcrnrlat=ne_lat, \
-                  lat_0=0.5*(ne_lat+sw_lat), lon_0=0.5*(ne_lon+sw_lon), resolution='i', area_thresh=10., ax=axes[0])
+  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+                  lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10., ax=axes[0])
                   
 # lon_2d, lat_2d = bgmap.makegrid(nx, ny)
   lon_2d, lat_2d = np.meshgrid(ref.lons, ref.lats)
   xg, yg = bgmap(lon_2d, lat_2d)
-  
-# Need to flip y-indices (matrix)
-
-# yg = yg[::-1,:]
-   
-# fix xg, yg coordinates so that pcolormesh plots them in the center.
-
-  dx2 = 0.5*(xg[0,1] - xg[0,0])
-  dy2 = 0.5*(yg[0,0] - yg[1,0])
-
-  if debug:
-       print("\n Prep_MRMS.plot_grid:   DX:  %f   DY:   %f" % (dx2, dy2))
-  
-  xe = np.append(xg-dx2, [xg[:,-1] + dx2])
-  ye = np.append(yg-dy2, [yg[-1,:] + dy2])
 
 # CAPPI REFLECTVITY PLOT
 
@@ -514,34 +493,13 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
       plot_shapefiles(bgmap, shapefiles=shapefiles, counties=_plot_counties, ax=axes[0])
   else:
       plot_shapefiles(bgmap, counties=_plot_counties, ax=axes[0])
- 
-# pixelated plot
 
   ref_data = ref.data[sweep]
-
-# im1  = bgmap.pcolormesh(xe, ye, ref_data, cmap=cmapr, norm=normr, vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[0])
-# cbar = bgmap.colorbar(im1,location='right')
-# cbar.set_label('Reflectivity (dBZ)')
-# axes[0].set_title('Pixel Reflectivity at Height:  %4.1f km' % 0.001*ref.zg[sweep])
-# at = AnchoredText("Max dBZ: %4.1f" % (ref_data.max()), loc=4, prop=dict(size=10), frameon=True,)
-# at.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
-# axes[0].add_artist(at)
-
-# Contour filled plot
-
-# bgmap = Basemap(projection='lcc', llcrnrlon=sw_lon,llcrnrlat=sw_lat,urcrnrlon=ne_lon,urcrnrlat=ne_lat, \
-#                 lat_0=0.5*(ne_lat+sw_lat), lon_0=0.5*(ne_lon+sw_lon), resolution='i', area_thresh=10.0, ax=axes[1])
-
-# if shapefiles:
-#     plot_shapefiles(bgmap, shapefiles=shapefiles, counties=_plot_counties, ax=axes[1])
-# else:
-#     plot_shapefiles(bgmap, counties=_plot_counties, ax=axes[1])
-#
 
   im1 = bgmap.contourf(xg, yg, ref_data, levels= _ref_scale, cmap=cmapr, norm=normr, \
                        vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[0])
 
-  cbar = bgmap.colorbar(im1,location='right')
+  cbar = bgmap.colorbar(im1,location='bottom')
   cbar.set_label('Reflectivity (dBZ)')
   axes[0].set_title('Reflectivity at Height:  %4.1f km' % (0.001*ref.zg[sweep]))
   at = AnchoredText("Max dBZ: %4.1f" % (ref_data.max()), loc=4, prop=dict(size=10), frameon=True,)
@@ -553,34 +511,15 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
   ref_data = ref.data.max(axis=0)
   zero_dbz = ref.zero_dbz.data
 
-  bgmap = Basemap(projection='lcc', llcrnrlon=sw_lon,llcrnrlat=sw_lat,urcrnrlon=ne_lon,urcrnrlat=ne_lat, \
-                  lat_0=0.5*(ne_lat+sw_lat), lon_0=0.5*(ne_lon+sw_lon), resolution='i', area_thresh=10.0, ax=axes[1])
+  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+                  lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10.0, ax=axes[1])
 
   if shapefiles:
       plot_shapefiles(bgmap, shapefiles=shapefiles, counties=_plot_counties, ax=axes[1])
   else:
       plot_shapefiles(bgmap, counties=_plot_counties, ax=axes[1])
  
-# pixelated plot
 
-# im1  = bgmap.pcolormesh(xe, ye, ref_data, cmap=cmapr, norm=normr, vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[2])
-# cbar = bgmap.colorbar(im1,location='right')
-# cbar.set_label('Reflectivity (dBZ)')
-# axes[2].set_title('Pixel Composite Reflectivity at Height:  %4.1f km' % 0.001*ref.zg[sweep])
-# at = AnchoredText("Max dBZ: %4.1f" % (ref_data.max()), loc=4, prop=dict(size=10), frameon=True,)
-# at.patch.set_boxstyle("round,pad=0.,rounding_size=0.2")
-# axes[2].add_artist(at)
-
-# contoured plot
-
-# bgmap = Basemap(projection='lcc', llcrnrlon=sw_lon,llcrnrlat=sw_lat,urcrnrlon=ne_lon,urcrnrlat=ne_lat, \
-#                 lat_0=0.5*(ne_lat+sw_lat), lon_0=0.5*(ne_lon+sw_lon), resolution='i', area_thresh=10.0, ax=axes[3])
-
-# if shapefiles:
-#     plot_shapefiles(bgmap, shapefiles=shapefiles, counties=_plot_counties, ax=axes[3])
-# else:
-#     plot_shapefiles(bgmap, counties=_plot_counties, ax=axes[3])
- 
   im1 = bgmap.contourf(xg, yg, ref_data, levels= _ref_scale, cmap=cmapr, norm=normr, \
                        vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[1])
 
@@ -594,11 +533,12 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
 # Plot zeros as "o"
 
   if zero_dbz.mask.any() == True:
-      r_mask = (zero_dbz.mask == False)     
+      r_mask = (zero_dbz.mask == False)
+      # zero's are diff at various levels... plot where it's 0 through the column
+      r_mask=np.bitwise_and.reduce(r_mask, axis=0)  
       bgmap.scatter(xg[r_mask], yg[r_mask], s=15, facecolors='none', \
                     edgecolors='k', alpha=0.3, ax=axes[1]) 
-      if debug:
-           print("\n Prep_MRMS.plot_grid:  Number of zero reflectivity obs found:  %d" % np.sum(r_mask) )
+      print("\n Prep_MRMS.plot_grid:  Number of zero reflectivity obs found:  %d" % np.sum(r_mask) )
            
 # Get other metadata....for labeling
 
@@ -777,7 +717,7 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
 
 def run(options):
    tMAIN = timeit.time()
-
+   
    if options.dir == None:
           
       print("\n\n ***** USER MUST SPECIFY A DIRECTORY WHERE FILES ARE *****")
@@ -795,13 +735,6 @@ def run(options):
 
    if options.thin > 1:
        _grid_dict['thin_grid'] = options.thin
-      
-   if options.plot == False:
-       plot_grid_flag = False
-   else:
-       sweep_num = options.plot
-       plot_grid_flag = True
-       plot_filename = None
 
    if options.realtime != None:
        year   = int(options.realtime[0:4])
@@ -889,11 +822,11 @@ def run(options):
                               QC_info=_grid_dict['QC_info'], zero_levels=_grid_dict['zero_levels'])
        print("\n --> Time for DART write: {} seconds".format(timeit.time() - tDART))
    
-   if plot_grid_flag:
+   if options.plot != '':
        tPLOT = timeit.time()
        fsuffix = "OpMRMS_%s" % (ref_obj.time.strftime('%Y%m%d_%H%M'))
        plot_filename = os.path.join(out_path, fsuffix)
-       plot_grid(ref_obj, sweep_num, plot_filename = plot_filename, debug=_debug)
+       plot_grid(ref_obj, int(options.plot), plot_filename = plot_filename, cntrpoint=options.loc)
        print("\n --> Time to plot image: {} seconds".format(timeit.time() - tPLOT))
    
    print("\n ----> Time for MRMS operations: {} seconds".format(timeit.time() - tMAIN))
