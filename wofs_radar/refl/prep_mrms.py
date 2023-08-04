@@ -50,9 +50,15 @@ from ..utils.dart_tools import mrms_write_DART_ascii
 import xarray as xr
 import pandas as pd
 
+from pygeodesy.sphericalNvector import LatLon
+from pygeodesy.points import isenclosedBy
+
 # missing value
 _missing = -9999.
 _plot_counties = True
+
+_domain_plot_size = 900000
+_domain_gridpoint_margin = 7
 
 # Colorscale information
 
@@ -68,8 +74,8 @@ _temp_netcdf_file = "./tmp.nc"
 
 # Grid stuff
 
-NX = 172 #292  # changed from 200 to leave a 20 km ring inside domain
-NY = 150 #232
+NX = 300 #292  # changed from 200 to leave a 20 km ring inside domain
+NY = 300 #232
 
 # Width in minutes of time to look for radar files every 15 min
 
@@ -344,7 +350,7 @@ def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflect
 #=========================================================================================
 # DBZ Mask
 
-def dbz_masking(ref, thin_zeros=2, cloc=None):
+def dbz_masking(ref, thin_zeros=2, cloc=None, domain_file=None):
    
    nz, ny, nx = ref.data.shape
   
@@ -404,28 +410,54 @@ def dbz_masking(ref, thin_zeros=2, cloc=None):
        mask2         = ref.data.mask
        ref.data.mask = np.logical_or(mask1, mask2)
 
+
    if cloc != None:
        eln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],90.0)
        wln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],270.0)
        nlt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],0.0)
        slt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],180.0)
+
        lon_2d, lat_2d = np.meshgrid(ref.lons, ref.lats)
+
        emask = lon_2d > eln[1]
        wmask = lon_2d < wln[1]
        nmask = lat_2d > nlt[0]
        smask = lat_2d < slt[0]
 
-       for m in np.arange(ref.data.shape[0]):
-           ref.data.mask[m] = np.logical_or(emask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(wmask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(smask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(nmask, ref.data.mask[m])
+       for level in np.arange(ref.data.shape[0]):
+           ref.data.mask[level] = np.logical_or(emask, ref.data.mask[level])
+           ref.data.mask[level] = np.logical_or(wmask, ref.data.mask[level])
+           ref.data.mask[level] = np.logical_or(smask, ref.data.mask[level])
+           ref.data.mask[level] = np.logical_or(nmask, ref.data.mask[level])
 
-       for m in np.arange(ref.zero_dbz.data.shape[0]):
-           ref.zero_dbz.data.mask[m] = np.logical_or(emask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(wmask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(smask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(nmask, ref.zero_dbz.data.mask[m])
+       for level in np.arange(ref.zero_dbz.data.shape[0]):
+           ref.zero_dbz.data.mask[level] = np.logical_or(emask, ref.zero_dbz.data.mask[level])
+           ref.zero_dbz.data.mask[level] = np.logical_or(wmask, ref.zero_dbz.data.mask[level])
+           ref.zero_dbz.data.mask[level] = np.logical_or(smask, ref.zero_dbz.data.mask[level])
+           ref.zero_dbz.data.mask[level] = np.logical_or(nmask, ref.zero_dbz.data.mask[level])
+
+
+   if domain_file != None:
+        wrfin = ncdf.Dataset(domain_file, mode = 'r')
+        wlat = wrfin.variables['XLAT' if 'XLAT' in wrfin.variables else 'XLAT_M'][:]
+        wlon = wrfin.variables['XLONG' if 'XLONG' in wrfin.variables else 'XLONG_M'][:]
+
+        bounds = LatLon(wlat[0,_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,_domain_gridpoint_margin]), \
+            LatLon(wlat[0,_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
+            LatLon(wlat[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
+            LatLon(wlat[0,-_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,_domain_gridpoint_margin])
+
+        print(f"Grid point border margin: {_domain_gridpoint_margin}")
+        print(f"Top left domain: {bounds[0]}")
+        print(f"Top right domain: {bounds[1]}")
+        print(f"Bottom right domain: {bounds[2]}")
+        print(f"Bottom left domain: {bounds[3]}")
+
+        for j in np.arange(ny):
+            for i in np.arange(nx):
+                is_enclosed = not isenclosedBy(LatLon(ref.lats[j], ref.lons[i]), bounds) 
+                ref.data.mask[:,j,i] = np.logical_or(is_enclosed, ref.data.mask[:,j,i])
+                ref.zero_dbz.data.mask[:,j,i] = np.logical_or(is_enclosed, ref.zero_dbz.data.mask[:,j,i])
 
    print(" Size of REF mask after domain edge buffer mask: %d" % np.sum(ref.data.mask == False))
         
@@ -538,7 +570,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
 
   ref_data = ref.data[sweep]
 
-  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+  bgmap = Basemap(projection='lcc', width=_domain_plot_size, height=_domain_plot_size, \
                   lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10., ax=axes[0])
                   
 # lon_2d, lat_2d = bgmap.makegrid(nx, ny)
@@ -569,7 +601,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
   ref_data = ref.data.max(axis=0)
   zero_dbz = ref.zero_dbz.data
 
-  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+  bgmap = Basemap(projection='lcc', width=_domain_plot_size, height=_domain_plot_size, \
                   lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10.0, ax=axes[1])
 
   if shapefiles:
@@ -862,8 +894,8 @@ def run(options):
 
    ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name)
    ref_obj.time = a_time
-
-   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], cloc=options.loc)
+   
+   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], domain_file=options.domain_path ) #cloc=options.loc
 
    if options.write == True:  
    

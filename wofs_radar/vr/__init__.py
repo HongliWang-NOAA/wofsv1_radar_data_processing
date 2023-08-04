@@ -28,4 +28,5 @@ def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file
     obj.interactive = None
     obj.write_dart = settings.rass_write_dart
     obj.debug = settings.default_debug
+    obj.domain_path = settings.default_domain_path.format(start_time.strftime("%Y%m%d"))
     run(radar, start_time, obj)
