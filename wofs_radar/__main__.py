@@ -31,6 +31,7 @@ if __name__ == "__main__":
     parser.add_option("-y", "--latitude",   dest="lat", default = None)
     parser.add_option("-x", "--longitude",   dest="lon", default = None)
     parser.add_option("-f", "--file",   dest="file", default = None)
+    parser.add_option("-d", "--domain",   dest="domain", default = None)
 
     (options, args) = parser.parse_args()
 
@@ -41,13 +42,13 @@ if __name__ == "__main__":
 
     with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
         refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
-        pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file))
+        pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain))
 
         # run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file)
         
         for name in radars:
             abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
-            pool.apply_async(abortable_func, args = (run_time, name, float(options.lon), float(options.lat), options.file))
+            pool.apply_async(abortable_func, args = (run_time, name, float(options.lon), float(options.lat), options.file, options.domain))
             # run_vr_for_radar_time(run_time, name, options.file)    
 
         pool.close()
