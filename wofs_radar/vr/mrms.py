@@ -115,7 +115,7 @@ _grid_dict = {
               'projection'      : 'lcc',         # map projection to use for gridded data
               'mask_vr_with_dbz': True,
               '0dbz_obtype'     : True,
-              'thin_zeros'      : 4,
+              'thin_zeros'      : 1,
               'halo_footprint'  : 3,
               'nthreads'        : 1,
               'ns_radius'       : 421.0,
