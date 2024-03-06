@@ -25,7 +25,7 @@ COPY ./environment.yml /opt/wofs
 COPY ./setup.py /opt/wofs
 COPY ./install.sh /opt/wofs
 
-RUN curl micro.mamba.pm/install.sh | bash && \  
+RUN curl -L micro.mamba.pm/install.sh | bash && \  
     /root/.local/bin/micromamba env create --file /opt/wofs/environment.yml 
 
 RUN micromamba activate wofs-radar && \
