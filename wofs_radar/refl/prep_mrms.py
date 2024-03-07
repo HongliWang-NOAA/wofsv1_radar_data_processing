@@ -50,9 +50,14 @@ from ..utils.dart_tools import mrms_write_DART_ascii
 import xarray as xr
 import pandas as pd
 
+from pygeodesy.sphericalNvector import LatLon
+from pygeodesy.points import isenclosedBy
+
 # missing value
 _missing = -9999.
 _plot_counties = True
+
+_domain_gridpoint_margin = 7
 
 # Colorscale information
 
@@ -68,8 +73,8 @@ _temp_netcdf_file = "./tmp.nc"
 
 # Grid stuff
 
-NX = 172 #292  # changed from 200 to leave a 20 km ring inside domain
-NY = 150 #232
+# NX = 300 #292  # changed from 200 to leave a 20 km ring inside domain
+# NY = 300 #232
 
 # Width in minutes of time to look for radar files every 15 min
 
@@ -237,7 +242,7 @@ def get_dir_files(dir, pattern, debug=False):
 #=========================================================================================
 # Get the filenames out of the directory
 
-def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflectivityQC_smoothed"):
+def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflectivityQC_smoothed", NX = 300, NY = 300):
 
     levels = _grid_dict['levels']
     nlvls  = len(levels)
@@ -344,92 +349,130 @@ def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflect
 #=========================================================================================
 # DBZ Mask
 
-def dbz_masking(ref, thin_zeros=2, cloc=None):
-   
-   nz, ny, nx = ref.data.shape
-  
-# First create zeros
-   zgo = _grid_dict['zero_levels']
-   nzo = len(zgo)
-   zeros = np.ones((nzo, ny, nx), dtype=np.float32)
+def dbz_masking(ref, thin_zeros=2, cloc=None, wlat = None, wlon = None):
 
-   zero_dbz = np.ma.masked_where(zeros == 1.0, zeros)
-   
-   print(" Initial number of zeros in the field:  %d\n " % (np.sum(zero_dbz.mask==False)))
-   
-   if thin_zeros > 0:
-      zero_dbz.data[:,::thin_zeros, ::thin_zeros] = 0.0       # Here is where the thinned number of zeros is created
-      zero_dbz.mask[:,::thin_zeros, ::thin_zeros] = False     # because where mask == False, we have a zero...
+    nz, ny, nx = ref.data.shape
 
-   print(" Number of zeros in the field after thining:  %d\n " % (np.sum(zero_dbz.mask==False)))
+    # First create zeros
+    zgo = _grid_dict['zero_levels']
+    nzo = len(zgo)
+    zeros = np.ones((nzo, ny, nx), dtype=np.float32)
 
-   ref.composite = ref.data.data
-   ref.temp = zeros
+    zero_dbz = np.ma.masked_where(zeros == 1.0, zeros)
 
-   for ko in np.arange(nzo):
-      for kr in np.arange(nz):
-         if zgo[ko] == ref.zg[kr]:
-            ref.temp[ko,:,:] = ref.data.data[kr,:,:]
+    print(" Initial number of zeros in the field:  %d\n " % (np.sum(zero_dbz.mask==False)))
 
-   zero_dbz.mask[ ref.temp > _grid_dict['min_dbz_zeros'] ] = True
+    if thin_zeros > 0:
+        zero_dbz.data[:,::thin_zeros, ::thin_zeros] = 0.0       # Here is where the thinned number of zeros is created
+        zero_dbz.mask[:,::thin_zeros, ::thin_zeros] = False     # because where mask == False, we have a zero...
 
-   print(" Number of zeros in the field after compositive ref mask:  %d\n " % (np.sum(zero_dbz.mask==False)))
-   
-   raw_field = np.where(ref.composite < _grid_dict['min_dbz_zeros'], 0.0, ref.composite)
+    print(" Number of zeros in the field after thining:  %d\n " % (np.sum(zero_dbz.mask==False)))
 
-   hhalo = _grid_dict['halo_footprint']
-   vhalo = _grid_dict['vert_halo_fp']
-   max_neighbor = (ndimage.maximum_filter(raw_field, size=(vhalo,hhalo,hhalo)) > 0.1)
+    ref.composite = ref.data.data
+    ref.temp = zeros
 
-   for ko in np.arange(nzo):
-      for kr in np.arange(nz):
-         if zgo[ko] == ref.zg[kr]:
-            zero_dbz.mask[ko][max_neighbor[kr] == True] = True
+    for ko in np.arange(nzo):
+        for kr in np.arange(nz):
+            if zgo[ko] == ref.zg[kr]:
+                ref.temp[ko,:,:] = ref.data.data[kr,:,:]
 
-   print(" Number of zeros in the field after halo:  %d\n " % (np.sum(zero_dbz.mask==False)))
-   
-# Create new object so that we can combine later
+    zero_dbz.mask[ ref.temp > _grid_dict['min_dbz_zeros'] ] = True
 
-   obj_zero_dbz = Gridded_Field("zero_dbz", data=zero_dbz, zg=_grid_dict['zero_levels'], radar_hgt=0.0)
-   
-   ref.zero_dbz = obj_zero_dbz
-   
-# Now clip the reflectivity
+    print(" Number of zeros in the field after compositive ref mask:  %d\n " % (np.sum(zero_dbz.mask==False)))
 
-   ref.data.mask[ ref.data < _grid_dict['min_dbz_analysis'] ] = True
-             
-   if _grid_dict['max_height'] > 0:
-       zg3d          = np.repeat(ref.zg, ny*nx).reshape(nz,ny,nx)
-       mask1         = (zg3d > _grid_dict['max_height'])  
-       mask2         = ref.data.mask
-       ref.data.mask = np.logical_or(mask1, mask2)
+    raw_field = np.where(ref.composite < _grid_dict['min_dbz_zeros'], 0.0, ref.composite)
 
-   if cloc != None:
-       eln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],90.0)
-       wln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],270.0)
-       nlt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],0.0)
-       slt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],180.0)
-       lon_2d, lat_2d = np.meshgrid(ref.lons, ref.lats)
-       emask = lon_2d > eln[1]
-       wmask = lon_2d < wln[1]
-       nmask = lat_2d > nlt[0]
-       smask = lat_2d < slt[0]
+    hhalo = _grid_dict['halo_footprint']
+    vhalo = _grid_dict['vert_halo_fp']
+    max_neighbor = (ndimage.maximum_filter(raw_field, size=(vhalo,hhalo,hhalo)) > 0.1)
 
-       for m in np.arange(ref.data.shape[0]):
-           ref.data.mask[m] = np.logical_or(emask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(wmask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(smask, ref.data.mask[m])
-           ref.data.mask[m] = np.logical_or(nmask, ref.data.mask[m])
+    for ko in np.arange(nzo):
+        for kr in np.arange(nz):
+            if zgo[ko] == ref.zg[kr]:
+                zero_dbz.mask[ko][max_neighbor[kr] == True] = True
 
-       for m in np.arange(ref.zero_dbz.data.shape[0]):
-           ref.zero_dbz.data.mask[m] = np.logical_or(emask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(wmask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(smask, ref.zero_dbz.data.mask[m])
-           ref.zero_dbz.data.mask[m] = np.logical_or(nmask, ref.zero_dbz.data.mask[m])
+    print(" Number of zeros in the field after halo:  %d\n " % (np.sum(zero_dbz.mask==False)))
 
-   print(" Size of REF mask after domain edge buffer mask: %d" % np.sum(ref.data.mask == False))
-        
-   return ref
+    # Create new object so that we can combine later
+
+    obj_zero_dbz = Gridded_Field("zero_dbz", data=zero_dbz, zg=_grid_dict['zero_levels'], radar_hgt=0.0)
+
+    ref.zero_dbz = obj_zero_dbz
+
+    # Now clip the reflectivity
+
+    ref.data.mask[ ref.data < _grid_dict['min_dbz_analysis'] ] = True
+                
+    if _grid_dict['max_height'] > 0:
+        zg3d          = np.repeat(ref.zg, ny*nx).reshape(nz,ny,nx)
+        mask1         = (zg3d > _grid_dict['max_height'])  
+        mask2         = ref.data.mask
+        ref.data.mask = np.logical_or(mask1, mask2)
+
+
+#    if cloc != None:
+#        eln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],90.0)
+#        wln = get_end_point(cloc[0],cloc[1],_grid_dict['ew_radius'],270.0)
+#        nlt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],0.0)
+#        slt = get_end_point(cloc[0],cloc[1],_grid_dict['ns_radius'],180.0)
+
+#        lon_2d, lat_2d = np.meshgrid(ref.lons, ref.lats)
+
+#        emask = lon_2d > eln[1]
+#        wmask = lon_2d < wln[1]
+#        nmask = lat_2d > nlt[0]
+#        smask = lat_2d < slt[0]
+
+#        for level in np.arange(ref.data.shape[0]):
+#            ref.data.mask[level] = np.logical_or(emask, ref.data.mask[level])
+#            ref.data.mask[level] = np.logical_or(wmask, ref.data.mask[level])
+#            ref.data.mask[level] = np.logical_or(smask, ref.data.mask[level])
+#            ref.data.mask[level] = np.logical_or(nmask, ref.data.mask[level])
+
+#        for level in np.arange(ref.zero_dbz.data.shape[0]):
+#            ref.zero_dbz.data.mask[level] = np.logical_or(emask, ref.zero_dbz.data.mask[level])
+#            ref.zero_dbz.data.mask[level] = np.logical_or(wmask, ref.zero_dbz.data.mask[level])
+#            ref.zero_dbz.data.mask[level] = np.logical_or(smask, ref.zero_dbz.data.mask[level])
+#            ref.zero_dbz.data.mask[level] = np.logical_or(nmask, ref.zero_dbz.data.mask[level])
+
+    lx = len(wlat[0,:,0]) - 1
+    ly = len(wlat[0,0,:]) - 1
+
+    outer_domain = LatLon(wlat[0,0,0], wlon[0,0,0]), \
+        LatLon(wlat[0,0,ly], wlon[0,0,ly]), \
+        LatLon(wlat[0,lx,ly], wlon[0,lx,ly]), \
+        LatLon(wlat[0,lx,0], wlon[0,lx,0])
+
+    inner_domain = LatLon(wlat[0,_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,_domain_gridpoint_margin]), \
+        LatLon(wlat[0,_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
+        LatLon(wlat[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
+        LatLon(wlat[0,-_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,_domain_gridpoint_margin])
+
+    #print(f"Grid point border margin: {_domain_gridpoint_margin}")
+    print(f"Bottom left outer domain: {outer_domain[0]}")
+    print(f"Bottom right outer domain: {outer_domain[1]}")
+    print(f"Top right outer domain: {outer_domain[2]}")
+    print(f"Top left outer domain: {outer_domain[3]}")
+
+    print(f"Bottom left inner domain: {inner_domain[0]}")
+    print(f"Bottom right inner domain: {inner_domain[1]}")
+    print(f"Top right inner domain: {inner_domain[2]}")
+    print(f"Top left inner domain: {inner_domain[3]}")
+
+    # Remove everything outside of the domain; remove anything in the border that is != 0
+    for j in np.arange(ny):
+        for i in np.arange(nx):
+            point = LatLon(ref.lats[j], ref.lons[i])
+            if not isenclosedBy(point, outer_domain) :
+                ref.data.mask[:,j,i] = True
+                ref.zero_dbz.data.mask[:,j,i] = True
+            elif not isenclosedBy(point, inner_domain) :
+                ref.data.mask[:,j,i] = np.logical_or(ref.data[:,j,i] != 0, ref.data.mask[:,j,i])
+                ref.zero_dbz.data.mask[:,j,i] = np.logical_or(ref.zero_dbz.data[:,j,i] != 0, ref.zero_dbz.data.mask[:,j,i])
+
+    print(" Size of REF mask after domain edge buffer mask: %d" % np.sum(ref.data.mask == False))
+            
+    return ref
 
 #=========================================================================================
 # Calculate lat-lon given distance and center lat-lon
@@ -512,7 +555,7 @@ def plot_shapefiles(map, shapefiles=None, color='k', linewidth=0.5, ax=None, \
 #
 # Create processed reflectivity data  
 
-def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False, cntrpoint=[0,0]):
+def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False, cntrpoint=[0,0], width = 0, height = 0):
   
 # Set up colormaps 
 
@@ -538,7 +581,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
 
   ref_data = ref.data[sweep]
 
-  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+  bgmap = Basemap(projection='lcc', width=width, height=height, \
                   lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10., ax=axes[0])
                   
 # lon_2d, lat_2d = bgmap.makegrid(nx, ny)
@@ -565,11 +608,14 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
   axes[0].add_artist(at)
 
 # COMPOSITE PLOT
+  ref_mask = (ref.data.mask == False)
+  ref_mask=np.bitwise_or.reduce(ref.data.mask, axis=0)  
 
-  ref_data = ref.data.max(axis=0)
+  masked_y = np.ma.masked_where(ref_mask == False, ref.data.max(axis=0))
+
   zero_dbz = ref.zero_dbz.data
 
-  bgmap = Basemap(projection='lcc', width=900000, height=900000, \
+  bgmap = Basemap(projection='lcc', width=width, height=height, \
                   lat_0=cntrpoint[0], lon_0=cntrpoint[1], resolution='i', area_thresh=10.0, ax=axes[1])
 
   if shapefiles:
@@ -578,7 +624,7 @@ def plot_grid(ref, sweep, plot_filename=None, shapefiles=None, interactive=False
       plot_shapefiles(bgmap, counties=_plot_counties, ax=axes[1])
  
 
-  im1 = bgmap.contourf(xg, yg, ref_data, levels= _ref_scale, cmap=cmapr, norm=normr, \
+  im1 = bgmap.contourf(xg, yg, masked_y, levels= _ref_scale, cmap=cmapr, norm=normr, \
                        vmin = _ref_min_plot, vmax = _ref_scale.max(), ax=axes[1])
 
   cbar = bgmap.colorbar(im1,location='right')
@@ -776,21 +822,6 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
 def run(options):
    tMAIN = timeit.time()
    
-   if options.dir == None:
-          
-      print("\n\n ***** USER MUST SPECIFY A DIRECTORY WHERE FILES ARE *****")
-      print("\n                         EXITING!\n\n")
-      parser.print_help()
-      print()
-      return 1
-      
-   if options.loc == None:
-      print("\n\n ***** USER MUST SPECIFY LAT/LON CENTER POINT *****")
-      print("\n                         EXITING!\n\n")
-      parser.print_help()
-      print()
-      return 1
-
    if options.thin > 1:
        _grid_dict['thin_grid'] = options.thin
 
@@ -859,11 +890,15 @@ def run(options):
        os.makedirs(out_path)  
    out_filename = os.path.join(out_path, out_filename)
 
+   wrfin = ncdf.Dataset(options.domain_path, mode = 'r')
+   wlat = wrfin.variables['XLAT' if 'XLAT' in wrfin.variables else 'XLAT_M'][:]
+   wlon = wrfin.variables['XLONG' if 'XLONG' in wrfin.variables else 'XLONG_M'][:]
+   NX = len(wlat[0,:,0])
+   NY = len(wlat[0,0,:])
 
-   ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name)
+   ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
    ref_obj.time = a_time
-
-   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], cloc=options.loc)
+   ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], wlat=wlat, wlon=wlon) #cloc=options.loc
 
    if options.write == True:  
    
@@ -884,7 +919,7 @@ def run(options):
        tPLOT = timeit.time()
        fsuffix = "OpMRMS_%s" % (ref_obj.time.strftime('%Y%m%d_%H%M'))
        plot_filename = os.path.join(out_path, fsuffix)
-       plot_grid(ref_obj, int(options.plot), plot_filename = plot_filename, cntrpoint=options.loc)
+       plot_grid(ref_obj, int(options.plot), plot_filename = plot_filename, cntrpoint=options.loc, width = 20000 + NX*wrfin.getncattr('DX'), height = 20000 + NY*wrfin.getncattr('DY'))
        print("\n --> Time to plot image: {} seconds".format(timeit.time() - tPLOT))
    
    print("\n ----> Time for MRMS operations: {} seconds".format(timeit.time() - tMAIN))

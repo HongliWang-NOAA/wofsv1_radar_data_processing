@@ -3,7 +3,7 @@ import types, os
 from ..Config import AppConfiguration
 from .prep_mrms import run
 
-def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config_file: str):
+def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config_file: str, domain_file: str):
     settings = AppConfiguration.load(config_file)
 
     obj = types.SimpleNamespace()
@@ -16,5 +16,6 @@ def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config
     obj.refl_var_name = settings.mrms_refl_var_name
     obj.loc = [lat, lon]
     obj.thin = 1    
+    obj.domain_path = domain_file
     run(obj)
 
