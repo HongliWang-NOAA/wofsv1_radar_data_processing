@@ -88,7 +88,7 @@ _debug = True
 # Parameter dict for reflectivity masking
 _grid_dict = {
               'zero_dbz_obtype' : True,
-              'thin_zeros'      : 3,
+              'thin_zeros'      : 1,
               'halo_footprint'  : 5,
               'vert_halo_fp'    : 1,
               'ns_radius'       : 421.0,
