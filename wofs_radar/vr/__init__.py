@@ -2,7 +2,7 @@ import types, os
 from ..Config import AppConfiguration
 from .mrms import run
 
-def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file: str):
+def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file: str, domain_file: str):
     settings = AppConfiguration.load(config_file)
 
     print(f'Processing radar {radar}')
@@ -28,5 +28,5 @@ def run_vr_for_radar_time(start_time, radar, lon: float, lat: float, config_file
     obj.interactive = None
     obj.write_dart = settings.rass_write_dart
     obj.debug = settings.default_debug
-    obj.domain_path = settings.default_domain_path.format(start_time.strftime("%Y%m%d"))
+    obj.domain_path = domain_file
     run(radar, start_time, obj)

@@ -100,8 +100,8 @@ _vr_scale  = (-50.,50.)
 truelat1, truelat2 = 30.0, 60.0
 
 # Grid stuff
-NX = 172  # changed from 400 to leave a 20 km ring inside domain
-NY = 150
+# NX = 172  # changed from 400 to leave a 20 km ring inside domain
+# NY = 150
 
 # Parameter dict for Gridding
 _grid_dict = {
@@ -284,38 +284,50 @@ def vel_masking(vel, ref, cloc=None, domain_file=None):
         print(" Size of VR mask after height mask: %d" % np.sum(vel.data.mask == False))
 
     # Add buffer near domain edges
-    if cloc != None:
-        grid_spacing_xy = _grid_dict['grid_spacing_xy']/1000.
-        eln = cloc[1] + np.float(NX)*0.5*0.01*grid_spacing_xy
-        wln = cloc[1] - np.float(NX)*0.5*0.01*grid_spacing_xy
-        nlt = cloc[0] + np.float(NY)*0.5*0.01*grid_spacing_xy
-        slt = cloc[0] - np.float(NY)*0.5*0.01*grid_spacing_xy
-        lon_2d, lat_2d = np.meshgrid(vel.lons, vel.lats)
-        emask = lon_2d > eln
-        wmask = lon_2d < wln
-        nmask = lat_2d > nlt
-        smask = lat_2d < slt
-        for m in np.arange(vel.data.shape[0]):
-            vel.data.mask[m] = np.logical_or(emask, vel.data.mask[m])
-            vel.data.mask[m] = np.logical_or(wmask ,vel.data.mask[m])
-            vel.data.mask[m] = np.logical_or(smask, vel.data.mask[m])
-            vel.data.mask[m] = np.logical_or(nmask, vel.data.mask[m])
-        print(" Size of VR mask after domain edge buffer mask: %d" % np.sum(vel.data.mask == False))
+    # if cloc != None:
+    #     grid_spacing_xy = _grid_dict['grid_spacing_xy']/1000.
+    #     eln = cloc[1] + np.float(NX)*0.5*0.01*grid_spacing_xy
+    #     wln = cloc[1] - np.float(NX)*0.5*0.01*grid_spacing_xy
+    #     nlt = cloc[0] + np.float(NY)*0.5*0.01*grid_spacing_xy
+    #     slt = cloc[0] - np.float(NY)*0.5*0.01*grid_spacing_xy
+    #     lon_2d, lat_2d = np.meshgrid(vel.lons, vel.lats)
+    #     emask = lon_2d > eln
+    #     wmask = lon_2d < wln
+    #     nmask = lat_2d > nlt
+    #     smask = lat_2d < slt
+    #     for m in np.arange(vel.data.shape[0]):
+    #         vel.data.mask[m] = np.logical_or(emask, vel.data.mask[m])
+    #         vel.data.mask[m] = np.logical_or(wmask ,vel.data.mask[m])
+    #         vel.data.mask[m] = np.logical_or(smask, vel.data.mask[m])
+    #         vel.data.mask[m] = np.logical_or(nmask, vel.data.mask[m])
+    #     print(" Size of VR mask after domain edge buffer mask: %d" % np.sum(vel.data.mask == False))
 
     if domain_file != None:
         wrfin = ncdf.Dataset(domain_file, mode = 'r')
         wlat = wrfin.variables['XLAT' if 'XLAT' in wrfin.variables else 'XLAT_M'][:]
         wlon = wrfin.variables['XLONG' if 'XLONG' in wrfin.variables else 'XLONG_M'][:]
 
-        bounds = LatLon(wlat[0,_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,_domain_gridpoint_margin]), \
+        lx = len(wlat[0,:,0]) - 1
+        ly = len(wlat[0,0,:]) - 1
+
+        outer_domain = LatLon(wlat[0,0,0], wlon[0,0,0]), \
+            LatLon(wlat[0,0,ly], wlon[0,0,ly]), \
+            LatLon(wlat[0,lx,ly], wlon[0,lx,ly]), \
+            LatLon(wlat[0,lx,0], wlon[0,lx,0])
+            
+        inner_domain = LatLon(wlat[0,_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,_domain_gridpoint_margin]), \
             LatLon(wlat[0,_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
             LatLon(wlat[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,-_domain_gridpoint_margin]), \
             LatLon(wlat[0,-_domain_gridpoint_margin,_domain_gridpoint_margin], wlon[0,-_domain_gridpoint_margin,_domain_gridpoint_margin])
 
+        # Remove everything outside of the domain; remove anything in the border that is != 0
         for j in np.arange(len(vel.lats)):
             for i in np.arange(len(vel.lons)):
-                is_enclosed = not isenclosedBy(LatLon(ref.lats[j], ref.lons[i]), bounds) 
-                vel.data.mask[:,j,i] = np.logical_or(is_enclosed, ref.data.mask[:,j,i])
+                point = LatLon(vel.lats[j], vel.lons[i])
+                if not isenclosedBy(point, outer_domain) :
+                    vel.data.mask[:,j,i] = True
+                elif not isenclosedBy(point, inner_domain) :
+                    vel.data.mask[:,j,i] = np.logical_or(vel.data[:,j,i] != 0, vel.data.mask[:,j,i])
 
     return vel
 
@@ -693,7 +705,9 @@ def plot_gridded(ref, vel, sweep, fsuffix=None, dir=".", shapefiles=None, intera
     vr_mask = (vel.data.mask == False)[sweep]
     vr_data = vel.data[sweep]
 
-    im1 = bgmap.pcolormesh(xe, ye, vr_data, cmap=cmapv, vmin=_vr_scale[0], vmax=_vr_scale[1], ax=ax2)
+    masked_y = np.ma.masked_where(vr_mask == False, vel.data[sweep])
+
+    im1 = bgmap.pcolormesh(xe, ye, masked_y, cmap=cmapv, vmin=_vr_scale[0], vmax=_vr_scale[1], ax=ax2)
     cbar = bgmap.colorbar(im1,location='right')
     cbar.set_label('Dealised Radial Velocity (meters_per_second)')
     ax2.set_title('Gridded/Thresholded/Unfolded VR / Nyquist: %4.1f m/s' % vel.nyquist[sweep])

@@ -15,7 +15,5 @@ Note: you must bind the current working directory so that the application can re
 
 ## Testing
 ```
-python3 -m wofs_radar -t 202307201800 --longitude -101.86316 --latitude 38.63328 -r KPOE,KSHV -f app.local.cfg
-
-python3 -m wofs_radar -t 202303242000 --longitude -91.122146 --latitude 33.712886 -r KPOE,KSHV -f app.local.cfg
+python3 -m wofs_radar -t 202303242000 --longitude -91.122146 --latitude 33.712886 -r KPOE,KSHV,KVWX -f app.local.cfg -d /mnt/c/Joshua/temp/20230324/geo_em.d01.nc
 ```
