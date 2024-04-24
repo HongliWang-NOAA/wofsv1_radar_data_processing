@@ -74,7 +74,7 @@ def write_obs_seq_xarray(field, radar, filename=None, obs_error=3., volume_name=
     secs    = ncdf.date2num(utime, units = _time_units)
     # Retain DART time stamps
     days    = ncdf.date2num(utime, units = "days since 1601-01-01 00:00:00")
-    seconds = np.int(86400.*(days - np.floor(days)))
+    seconds = int(86400.*(days - np.floor(days)))
 
     print("\n -->  Writing %s as the radar file..." % (filename))
     #  mask_check = data.mask && numpy.isnan().any()
