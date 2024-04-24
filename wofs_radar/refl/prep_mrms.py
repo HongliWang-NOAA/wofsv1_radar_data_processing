@@ -332,11 +332,11 @@ def assemble_3D_grid_AWS(filenames, loc=None, debug=False, dbz_name = "MergedRef
 
     for n, filename in enumerate(filenames):
         
-#        try:
-        f = load_mrms_AWS(filename)
-#        except:
-#            print(f'Could not open file {filename}')
-#            continue
+        try:
+            f = load_mrms_AWS(filename)
+        except:
+            print(f'Could not open file {filename}')
+            continue
 
         if debug:
             print("\n Processing file:  %s" % (filename))
