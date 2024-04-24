@@ -40,20 +40,24 @@ if __name__ == "__main__":
 
     settings = AppConfiguration.load(options.file)
 
-    with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
-        refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
-        pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain))
+    if settings.default_parallel:
+        print('Running in parallel mode')
+        with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
+            refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
+            pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain))
 
-        # run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file, options.domain)
-        
+            for name in radars:
+                abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
+                pool.apply_async(abortable_func, args = (run_time, name, float(options.lon), float(options.lat), options.file, options.domain))
+
+            pool.close()
+            pool.join()   
+    else:
+        print('Running in serial mode')
+        run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file, options.domain)
         for name in radars:
-            abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
-            pool.apply_async(abortable_func, args = (run_time, name, float(options.lon), float(options.lat), options.file, options.domain))
-            # run_vr_for_radar_time(run_time, name, options.file, options.domain)    
+            run_vr_for_radar_time(run_time, name, float(options.lon), float(options.lat), options.file, options.domain)    
 
-        pool.close()
-        pool.join()   
-    
     output_dir = settings.rass_output.format(run_time.strftime("%Y%m%d"))
 
     __abortable_worker__(combine_from_pattern, '_VR_%s.nc' % run_time.strftime("%Y%m%d_%H%M"), 
