@@ -25,6 +25,10 @@ import os
 import sys
 import glob
 import time as timeit
+import re
+from operator import itemgetter
+import tempfile
+import gzip as gz
 
 # Need to set the backend BEFORE loading pyplot
 import matplotlib as mpl
@@ -44,7 +48,7 @@ import netCDF4 as ncdf
 import math
 
 from pyart.graph import cm
-import datetime as DT
+from datetime import datetime, timedelta
 from numpy import ma
 from ..utils.dart_tools import mrms_write_DART_ascii
 import xarray as xr
@@ -52,6 +56,8 @@ import pandas as pd
 
 from pygeodesy.sphericalNvector import LatLon
 from pygeodesy.points import isenclosedBy
+
+import s3fs
 
 # missing value
 _missing = -9999.
@@ -78,7 +84,7 @@ _temp_netcdf_file = "./tmp.nc"
 
 # Width in minutes of time to look for radar files every 15 min
 
-_dt_window = [-5,2]
+_dt_window = [-3,3]
 
 # Debug
 
@@ -91,6 +97,7 @@ _grid_dict = {
               'thin_zeros'      : 1,
               'halo_footprint'  : 5,
               'vert_halo_fp'    : 1,
+              'obs_grid_spacing': 5,
               'ns_radius'       : 421.0,
               'ew_radius'       : 411.0,
               'max_height'      : 10000.,
@@ -145,6 +152,8 @@ def get_loc(x, xc, radius):
 
 def Get_Closest_Elevations(path, anal_time, sub_dir=None, window=_dt_window):
    """
+   DEPRECATED IN FAVOR OF MRMS DATA FEED ON AWS - BRIAN MATILLA APRIL 2024
+   -----------------------------------------------------------------------
       get_closest_elevations:
           path:       Path to the top level directory of radar
           anal_time:  A datetime object which is the time to center
@@ -181,16 +190,16 @@ def Get_Closest_Elevations(path, anal_time, sub_dir=None, window=_dt_window):
            
        for fn in os.listdir(os.path.join(full_path,elev)):
        
-           tempdate = DT.datetime(int(fn[0:4]),int(fn[4:6]),int(fn[6:8]),int(fn[9:11]),int(fn[11:13]),int(fn[13:15]))
+           tempdate = datetime(int(fn[0:4]),int(fn[4:6]),int(fn[6:8]),int(fn[9:11]),int(fn[11:13]),int(fn[13:15]))
 
            timediff = anal_time - tempdate
-           time0    = anal_time + DT.timedelta(0,minutes=lwindow[0])
-           time1    = anal_time + DT.timedelta(0,minutes=lwindow[1])
+           time0    = anal_time + timedelta(0,minutes=lwindow[0])
+           time1    = anal_time + timedelta(0,minutes=lwindow[1])
            
            # Change this if you want +something -window instead of 0-900. if statement is +2-15
            # if timediff >= datetime.timedelta(0,-120) and timediff < datetime.timedelta(0,window):
 
-         # if timediff >= DT.timedelta(0,minutes=lwindow[0]) and timediff < DT.timedelta(0,minutes=lwindow[1]):
+         # if timediff >= timedelta(0,minutes=lwindow[0]) and timediff < timedelta(0,minutes=lwindow[1]):
            if tempdate >= time0 and tempdate < time1:
                tilt_time["%s/%s" % (elev,fn)] = timediff
     #          print anal_time
@@ -220,24 +229,180 @@ def Get_Closest_Elevations(path, anal_time, sub_dir=None, window=_dt_window):
    return ObsFileList
                  
 #=========================================================================================
-# Get the filenames out of the directory
 
-def get_dir_files(dir, pattern, debug=False):
+def Get_Closest_Elevations_AWS(anal_time, grid_dict=_grid_dict, window=_dt_window):
+    """
+    get_closest_elevations_AWS:
+        This routine upgrades Get_Closest_Elevations by combining a search window
+        and automated file selection from AWS. 
 
-    try:
-        os.path.isdir(dir)
-    except:
-        print(" %s is not a directory, exiting" % dir)
-        sys.exit(1)
+        anal_time: A datetime object which is the time to center
+                   the window search on.
+        window:     len(window) == 1:  this is the window +/- of the analysis time.
+                    len(window) == 2:  the window uses analysis_time + window[0] --> analysis_time + window[1]
+                                         Note that window[0] should equal to or less than zero.
+                    window units are SECONDS
+
+    RETURNS:    Either an empty list, or a list with full file names of the radar's tilts that are
+                withn the supplied window
+
+    Added by Brian Matilla - April 2024
+    """
+
+    ObsFileList = []
+    target_time = anal_time
+
+    start = target_time + timedelta(minutes = _dt_window[0]) #NEGATIVE dt_window, so operator must be positive here
+    end = target_time + timedelta(minutes = _dt_window[1])
+
+    elev_list = _grid_dict['levels']
+    for ea in elev_list:
+        valid_files = []
+        # FIND FILES ON AMAZON SERVER
+        fs = s3fs.S3FileSystem(anon=True)
+        path = f'noaa-mrms-pds/CONUS/MergedReflectivityQC_{ea}/{target_time:%Y%m%d}/'
+
+        files = np.array(fs.ls(path, refresh=True))
+
+        for v in files:
+            m = re.match('^MRMS_MergedReflectivityQC_[0,1][0-9].[0,5][0]_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})-(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2}).grib2.gz', v.split('/')[-1])
+
+            if m != None:
+                d = datetime.strptime(m.group('year') + m.group('month') + m.group('day') + '-' + m.group('hour') + m.group('minute') + m.group('second'), "%Y%m%d-%H%M%S")
+
+                if start <= d and d <= end:
+                    valid_files.append((d, abs((target_time - d).total_seconds()), v.split('/')[-1]))
+
+        # sort the files
+        sorted_files = sorted(valid_files, key = itemgetter(1))
+
+        # top (most recent within time block) to download
+        file_to_download = next(iter(sorted_files))[2]
+
+        ObsFileList.append(path+file_to_download)
+
+    return ObsFileList
+#=========================================================================================
+# Decompress zipped MRMS files from AWS
+
+def load_mrms_AWS(infile):
+    """
+    Because MRMS files on AWS are gzipped grib2 files, we must first decompress the file
+    prior to reading it.
+
+    infile: A grib2.gz file from AWS to be read in.
+
+    RETURNS: An xarray dataset with variable information and metadata
+    """ 
+
+    # Now pull the file but just read it, don't download it
+    fs = s3fs.S3FileSystem(anon=True)
+    aws_obj = fs.open(infile, mode='rb')
+    compressed_file = aws_obj.read()
+
+    #De-compress the bytes of the grib2 file and load in xarray
+    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=True) as f:
+        f.write(gz.decompress(compressed_file))
+        mrms_load = xr.open_mfdataset(f.name, engine='pynio', chunks=100, preprocess=lambda x: x.load())
+
+        mrms_load.close()    
         
-    filenames = glob.glob("%s/01.00/*.netcdf*" % (dir))
+    return mrms_load 
 
-    if debug:
-        print("\n Processing %d files in the directory:  %s" % (len(filenames), dir))
-        print("\n First file is %s" % (os.path.basename(filenames[0])))
-        print("\n Last  file is %s\n" % (os.path.basename(filenames[-1])))
+#=========================================================================================
+# Extract data from the AWS files
 
-    return filenames
+def assemble_3D_grid_AWS(filenames, loc=None, debug=False, dbz_name = "MergedReflectivityQC", NX = 300, NY = 300):
+    """
+    This routine assembles the various elevation angle data from MRMS files being passed 
+    in to prepare it for masking application.
+
+    filenames   : list of filenames to process
+    loc         : A center lat/lon point to focus the data preparation on.
+    dbz_name    : Defaults to the standard variable name within MRMS files.
+    NX/NY       : Default grid points to use.
+
+    RETURNS:    Gridded_Field object with the MRMS data assembled into a 3-D array.    
+
+    Code applied by Brian Matilla - Apr 2024
+    """
+
+    levels = _grid_dict['levels']
+    nlvls  = len(levels)
+
+    for n, filename in enumerate(filenames):
+        
+#        try:
+        f = load_mrms_AWS(filename)
+#        except:
+#            print(f'Could not open file {filename}')
+#            continue
+
+        if debug:
+            print("\n Processing file:  %s" % (filename))
+
+        if n == 0:
+            nlons  = len(f.lon_0)
+            nlats  = len(f.lat_0)
+ 
+            f_lats = f.variables['lat_0'][...]
+            f_lons = f.variables['lon_0'][...] - 360. #Convert from full 360 deg. to -180-180 hemispheres.
+
+            missingData = -99.
+            noCoverage = -999.
+            
+            time = datetime.strptime(filenames[n][-24:-9], '%Y%m%d-%H%M%S')
+
+            if loc != None:
+                ic     = get_loc(f_lons, loc[1], 0.5)[0]
+                jc     = get_loc(f_lats, loc[0], 0.5)[0]
+            else:
+                ic, jc = old_div(nlats,2), old_div(nlons,2)
+
+            i0, i1 = ic-old_div(NX,2), ic+old_div(NX,2)
+            j0, j1 = jc-old_div(NY,2), jc+old_div(NY,2)
+
+            # Fixing things when the NEWSe domain goes out of bounds
+
+            if i0 < 0:  
+                print("\n West edge of requested domain outside of MRMS grid:  %d " % (i0))
+                print("\n Adjusting indices")
+                i0       = 0
+
+            if j0 < 0:  
+                print("\n South edge of requested domain outside of MRMS grid:  %d " % (i0))
+                print("\n Adjusting indices")
+                j0       = 0
+
+            if debug:
+                print("\n %d  %d" % (i0, i1))
+                print("\n %d  %d" % (j0, j1))
+                print("\n SW Lon:  %f  NE_Lon:  %f" % (f_lons[i0], f_lons[i1]))
+                print("\n SW Lat:  %f  NE_Lat:  %f" % (f_lats[j0], f_lats[j1]))
+                      
+            g_lats    = f_lats[j0:j1:_grid_dict['obs_grid_spacing']]
+            g_lons    = f_lons[i0:i1:_grid_dict['obs_grid_spacing']]
+            array     = noCoverage * np.ones((nlvls, g_lats.size, g_lons.size))
+            g_heights = np.zeros((nlvls,))
+
+        g_heights[n] = float(filenames[n][-30:-25])*1000.    
+        
+        # APPLY a maximum 3x3 filter
+        #reffilt = np.where(f.variables[dbz_name][0,j0:j1,i0:i1] <= missingData, f.variables[dbz_name][0,j0:j1,i0:i1], ndimage.maximum_filter(f.variables[dbz_name][0,j0:j1,i0:i1], size=3, mode='constant', cval=0.0))
+
+        try:
+            array[n,...] = f.variables[dbz_name][0,j0:j1:_grid_dict['obs_grid_spacing'],i0:i1:_grid_dict['obs_grid_spacing']]
+            #array[n,...] = reffilt[::_grid_dict['obs_grid_spacing'],::_grid_dict['obs_grid_spacing']]
+        except:
+            array[n,...] = f.variables[dbz_name][j0:j1:_grid_dict['obs_grid_spacing'],i0:i1:_grid_dict['obs_grid_spacing']]
+         
+        f.close()
+ 
+    ref = ma.MaskedArray(array, mask = (array < missingData+1.))        
+    
+    return Gridded_Field(filename, data = ref, field = "REFLECTIVITY", zg = g_heights, \
+                         lats = g_lats, lons = g_lons, radar_hgt = 0.0, local_time = time, \
+                         missingData = missingData ) 
 
 #=========================================================================================
 # Get the filenames out of the directory
@@ -289,9 +454,9 @@ def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflect
             missingData = f.MissingData
             
             try:
-                time   = DT.datetime.fromtimestamp(f.variables['time'][0])
+                time   = datetime.fromtimestamp(f.variables['time'][0])
             except:
-                time   = DT.datetime.fromtimestamp(float(f.Time))
+                time   = datetime.fromtimestamp(float(f.Time))
 
             if loc != None:
                 ic     = get_loc(f_lons, loc[1], 0.5)[0]
@@ -745,11 +910,11 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
        
 # Use the time of the volume
 
-   secs    = ncdf.date2num(field.time, units = _time_units)   
+   secs    = ncdf.date2num(field.local_time, units = _time_units)   
    
 # Retain DART time stamps
 
-   days    = ncdf.date2num(field.time, units = "days since 1601-01-01 00:00:00")
+   days    = ncdf.date2num(field.local_time, units = "days since 1601-01-01 00:00:00")
    seconds = int(86400.*(days - np.floor(days)))  
   
    print("\n -->  Writing %s as the radar file..." % (filename))
@@ -784,7 +949,7 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
                    out.lon[nobs]                = lons[i]
                    out.lat[nobs]                = lats[j]
                    out.height[nobs]             = hgts[k]
-                   out.date[nobs]               = field.time
+                   out.date[nobs]               = field.local_time
                    out.utime[nobs]              = secs
                    out.day[nobs]                = days
                    out.second[nobs]             = seconds
@@ -807,7 +972,7 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
    # Add attributes to the files
     
    fnc = ncdf.Dataset(filename, mode = 'a')
-   fnc.history = "Created " + DT.datetime.today().strftime("%Y%m%d_%H%M")
+   fnc.history = "Created " + datetime.today().strftime("%Y%m%d_%H%M")
    fnc.version = "Version 1.0a by Lou Wicker and Thomas Jones (NSSL)"
    if volume_name != None:
        fnc.version = "Created from the MRMS radar volume:  %s" % volume_name
@@ -831,7 +996,7 @@ def run(options):
        day    = int(options.realtime[6:8])
        hour   = int(options.realtime[8:10])
        minute = int(options.realtime[10:12])
-       a_time = DT.datetime(year, mon, day, hour, minute, 0)
+       a_time = datetime(year, mon, day, hour, minute, 0)
 
 #-------------------------------------------------------------------------------
 
@@ -839,7 +1004,7 @@ def run(options):
 
    if options.realtime != None:
 
-       in_filenames = Get_Closest_Elevations(options.dir, a_time)
+       in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
 
        try:
            print("\n Prep_MRMS:  RealTime FLAG is true number of levels found:  %s\n" % (len(in_filenames)))
@@ -854,7 +1019,7 @@ def run(options):
            return 1
 
    else:
-       in_filenames = Get_Closest_Elevations(options.dir, a_time)
+       in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
        out_filenames = []
        print("\n Prep_MRMS:  Processing %d files in the directory:  %s\n" % (len(in_filenames), options.dir))
        print("\n Prep_MRMS:  First file is %s\n" % (in_filenames[0]))
@@ -881,7 +1046,7 @@ def run(options):
        str_time     = "%s_%s" % (os.path.basename(file)[-27:-17], os.path.basename(file)[-16:-10])
        prefix       = "RF_%s" % str_time
        out_filename = prefix
-       time         = DT.datetime.strptime(file[-18:-3], "%Y%m%d-%H%M%S")
+       time         = datetime.strptime(file[-24:-9], "%Y%m%d-%H%M%S")
        print(" Out filename:  %s\n" % out_filename)
 
 
@@ -893,10 +1058,10 @@ def run(options):
    wrfin = ncdf.Dataset(options.domain_path, mode = 'r')
    wlat = wrfin.variables['XLAT' if 'XLAT' in wrfin.variables else 'XLAT_M'][:]
    wlon = wrfin.variables['XLONG' if 'XLONG' in wrfin.variables else 'XLONG_M'][:]
-   NX = len(wlat[0,:,0])
-   NY = len(wlat[0,0,:])
+   NX = int(len(wlat[0,:,0])*(wrfin.getncattr('DX')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
+   NY = int(len(wlat[0,0,:])*(wrfin.getncattr('DY')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
 
-   ref_obj = assemble_3D_grid(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
+   ref_obj = assemble_3D_grid_AWS(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
    ref_obj.time = a_time
    ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], wlat=wlat, wlon=wlon) #cloc=options.loc
 
@@ -919,7 +1084,7 @@ def run(options):
        tPLOT = timeit.time()
        fsuffix = "OpMRMS_%s" % (ref_obj.time.strftime('%Y%m%d_%H%M'))
        plot_filename = os.path.join(out_path, fsuffix)
-       plot_grid(ref_obj, int(options.plot), plot_filename = plot_filename, cntrpoint=options.loc, width = 20000 + NX*wrfin.getncattr('DX'), height = 20000 + NY*wrfin.getncattr('DY'))
+       plot_grid(ref_obj, int(options.plot), plot_filename = plot_filename, cntrpoint=options.loc, width = 20000 + (len(wlat[0,:,0])*wrfin.getncattr('DX')), height = 20000 + (len(wlat[0,0,:])*wrfin.getncattr('DY')))
        print("\n --> Time to plot image: {} seconds".format(timeit.time() - tPLOT))
    
    print("\n ----> Time for MRMS operations: {} seconds".format(timeit.time() - tMAIN))
