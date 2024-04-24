@@ -283,15 +283,15 @@ def assemble_3D_grid(filenames, loc=None, debug=False, dbz_name = "MergedReflect
                 f_lats = f.variables['Lat'][...]
                 f_lons = f.variables['Lon'][...]
             except:
-                f_lats = np.float(f.Latitude)  - np.float(f.LatGridSpacing) * np.arange(nlats)
-                f_lons = np.float(f.Longitude) + np.float(f.LonGridSpacing) * np.arange(nlons)
+                f_lats = float(f.Latitude)  - float(f.LatGridSpacing) * np.arange(nlats)
+                f_lons = float(f.Longitude) + float(f.LonGridSpacing) * np.arange(nlons)
 
             missingData = f.MissingData
             
             try:
                 time   = DT.datetime.fromtimestamp(f.variables['time'][0])
             except:
-                time   = DT.datetime.fromtimestamp(np.float(f.Time))
+                time   = DT.datetime.fromtimestamp(float(f.Time))
 
             if loc != None:
                 ic     = get_loc(f_lons, loc[1], 0.5)[0]
@@ -356,7 +356,7 @@ def dbz_masking(ref, thin_zeros=2, cloc=None, wlat = None, wlon = None):
     # First create zeros
     zgo = _grid_dict['zero_levels']
     nzo = len(zgo)
-    zeros = np.ones((nzo, ny, nx), dtype=np.float32)
+    zeros = np.ones((nzo, ny, nx), dtype=float)
 
     zero_dbz = np.ma.masked_where(zeros == 1.0, zeros)
 
@@ -725,8 +725,8 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
        else:
            nz2        = len(levels) + len(zero_levels)
            
-       new_data       = np.ma.zeros((nz2, ny, nx), dtype=np.float32)
-       new_hgts       = np.ma.zeros((nz2), dtype=np.float32)
+       new_data       = np.ma.zeros((nz2, ny, nx), dtype=float)
+       new_hgts       = np.ma.zeros((nz2), dtype=float)
        
        for n, k in enumerate(levels):
            new_data[n,...] = data[n]
@@ -750,7 +750,7 @@ def write_obs_seq_xarray(field, filename=None, obs_error=None,
 # Retain DART time stamps
 
    days    = ncdf.date2num(field.time, units = "days since 1601-01-01 00:00:00")
-   seconds = np.int(86400.*(days - np.floor(days)))  
+   seconds = int(86400.*(days - np.floor(days)))  
   
    print("\n -->  Writing %s as the radar file..." % (filename))
     
