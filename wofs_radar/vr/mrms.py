@@ -29,7 +29,7 @@ from builtins import range
 from builtins import object
 
 import os
-import time as timeit
+import time
 
 # Need to set the backend BEFORE loading pyplot
 import matplotlib as mpl
@@ -201,7 +201,7 @@ def dbz_masking(ref, thin_zeros=2):
 
         nz, ny, nx = ref.data.shape
 
-        zero_dbz = np.ma.zeros((ny, nx), dtype=np.float32)
+        zero_dbz = np.ma.zeros((ny, nx), dtype=float)
 
         c_ref = ref.data.max(axis=0)
 
@@ -219,7 +219,7 @@ def dbz_masking(ref, thin_zeros=2):
 
         ref.zero_dbz = zero_dbz
 
-        new_z = np.ma.zeros((2, ny, nx), dtype=np.float32)
+        new_z = np.ma.zeros((2, ny, nx), dtype=float)
 
         for n, z in enumerate(_grid_dict['MRMS_zeros'][1:]):
             new_z[n] = z
@@ -286,10 +286,10 @@ def vel_masking(vel, ref, cloc=None, domain_file=None):
     # Add buffer near domain edges
     # if cloc != None:
     #     grid_spacing_xy = _grid_dict['grid_spacing_xy']/1000.
-    #     eln = cloc[1] + np.float(NX)*0.5*0.01*grid_spacing_xy
-    #     wln = cloc[1] - np.float(NX)*0.5*0.01*grid_spacing_xy
-    #     nlt = cloc[0] + np.float(NY)*0.5*0.01*grid_spacing_xy
-    #     slt = cloc[0] - np.float(NY)*0.5*0.01*grid_spacing_xy
+    #     eln = cloc[1] + float(NX)*0.5*0.01*grid_spacing_xy
+    #     wln = cloc[1] - float(NX)*0.5*0.01*grid_spacing_xy
+    #     nlt = cloc[0] + float(NY)*0.5*0.01*grid_spacing_xy
+    #     slt = cloc[0] - float(NY)*0.5*0.01*grid_spacing_xy
     #     lon_2d, lat_2d = np.meshgrid(vel.lons, vel.lats)
     #     emask = lon_2d > eln
     #     wmask = lon_2d < wln
@@ -371,7 +371,7 @@ def grid_data(volumes, field, LatLon=None):
 
         grid_spacing_xy = _grid_dict['grid_spacing_xy']
         domain_length   = _grid_dict['domain_radius_xy']
-        grid_pts_xy     = 1 + 2*np.int(domain_length/grid_spacing_xy)
+        grid_pts_xy     = 1 + 2*int(domain_length/grid_spacing_xy)
         nx, ny          = (grid_pts_xy, grid_pts_xy)
         radar_lat       = volumes[0].latitude['data']
         radar_lon       = volumes[0].longitude['data']
@@ -385,8 +385,8 @@ def grid_data(volumes, field, LatLon=None):
     else:  # grid based on model grid center LatLon
 
         grid_spacing_xy = _grid_dict['grid_spacing_xy']
-        nx              = 1 + np.int(_grid_dict['model_grid_size'][0] / grid_spacing_xy)
-        ny              = 1 + np.int(_grid_dict['model_grid_size'][1] / grid_spacing_xy)
+        nx              = 1 + int(_grid_dict['model_grid_size'][0] / grid_spacing_xy)
+        ny              = 1 + int(_grid_dict['model_grid_size'][1] / grid_spacing_xy)
         grid_pts_xy     = max(nx, ny)
         xg              = -0.5*_grid_dict['model_grid_size'][0] + grid_spacing_xy * np.arange(nx)
         yg              = -0.5*_grid_dict['model_grid_size'][1] + grid_spacing_xy * np.arange(ny)
@@ -437,14 +437,14 @@ def grid_data(volumes, field, LatLon=None):
         """
 
         if _grid_dict['anal_method'] == 'Cressman':
-            w    = np.zeros((z_in.shape), dtype=np.float64)
+            w    = np.zeros((z_in.shape), dtype=float64)
             ww   = (roi**2 - z_in**2) / (roi**2 + z_in**2)
             mask = (np.abs(z_in) <  roi)
             w[mask] = ww[mask]
             return w
 
         elif _grid_dict['anal_method'] == 'test':
-            return np.ones((z_in.shape), dtype=np.float64)
+            return np.ones((z_in.shape), dtype=float64)
 
         elif _grid_dict['anal_method'] == 'Barnes':
 
@@ -452,7 +452,7 @@ def grid_data(volumes, field, LatLon=None):
 
         else:  # Gasparoi and Cohen...
 
-            gc = np.zeros((z_in.shape), dtype=np.float64)
+            gc = np.zeros((z_in.shape), dtype=float64)
             z = abs(z_in)
             r = z / roi
             z1 = (((( r/12.  -0.5 )*r  +0.625 )*r +5./3. )*r  -5. )*r + 4. - 2./(3.*r)
@@ -464,7 +464,7 @@ def grid_data(volumes, field, LatLon=None):
             return gc
 
 
-    tt = timeit.clock()
+    tt = time.perf_counter()
 
     # Create 3D arrays for analysis grid, the vertical dimension is the number of tilts
 
@@ -541,7 +541,7 @@ def grid_data(volumes, field, LatLon=None):
         tmp = obs_2_grid2d(zobs, xob, yob, xg, yg, ix, iy, 1, 1, 0.1, min_range, 2.0*grid_spacing_xy, -99999.)
         zgrid[n] = tmp
 
-    print("\n %f secs to run superob analysis for all levels \n" % (timeit.clock()-tt))
+    print("\n %f secs to run superob analysis for all levels \n" % (time.perf_counter()-tt))
 
     print('\n Total number of valid obs in volume: %d \n' % total)
     print('\n Total number of valid obs in volume: %d \n' % np.sum(new_mask == False))
@@ -765,8 +765,8 @@ def write_radar_file(ref, vel, filename=None):
     # if there is a zero dbz obs type, reform the data array
     try:
         nx1, ny1       = ref.zero_dbz.shape
-        zero_data      = np.ma.zeros((2, ny1, nx1), dtype=np.float32)
-        zero_hgts      = np.ma.zeros((2, ny1, nx1), dtype=np.float32)
+        zero_data      = np.ma.zeros((2, ny1, nx1), dtype=float)
+        zero_hgts      = np.ma.zeros((2, ny1, nx1), dtype=float)
         zero_data[0]   = ref.zero_dbz
         zero_data[1]   = ref.zero_dbz
         zero_hgts[0:2] = ref.zero_dbz_zg[0:2]
@@ -788,7 +788,7 @@ def write_radar_file(ref, vel, filename=None):
 
     dtime   = ncdf.num2date(ref.time['data'].mean(), ref.time['units'])
     days    = ncdf.date2num(dtime, units = "days since 1601-01-01 00:00:00")
-    seconds = np.int(86400.*(days - np.floor(days)))
+    seconds = int(86400.*(days - np.floor(days)))
 
     # create the fileput filename and create new netCDF4 file
 
@@ -936,7 +936,7 @@ def run(radar, run_time, options):
 
     # Read input file and create radar object
 
-    t0 = timeit.time()
+    t0 = time.perf_counter()
 
     tilts = list(getRadarProducts(radar, run_time, options.debug, options.input_refl, options.input_vel))
 
@@ -954,7 +954,7 @@ def run(radar, run_time, options):
     if _grid_dict['mask_vr_with_dbz']:
         vel = vel_masking(vel, ref, domain_file=options.domain_path)
 
-    print("\n Time for gridding fields: {} seconds".format(timeit.time() - t0))
+    print("\n Time for gridding fields: {} seconds".format(time.perf_counter() - t0))
 
     print('\n ================================================================================')
 

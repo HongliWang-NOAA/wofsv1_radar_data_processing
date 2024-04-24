@@ -260,8 +260,8 @@ def opaws_write_DART_ascii(obs, filename=None, obs_error=None, zero_dbz_obtype=T
     else:
         try:
             nz, ny, nx        = data.shape
-            new_data          = np.ma.zeros((nz+2, ny, nx), dtype=np.float32)
-            new_hgts          = np.ma.zeros((nz+2, ny, nx), dtype=np.float32)
+            new_data          = np.ma.zeros((nz+2, ny, nx), dtype=float)
+            new_hgts          = np.ma.zeros((nz+2, ny, nx), dtype=float)
             new_data[0:nz]    = data[0:nz]
             new_hgts[0:nz]    = hgts[0:nz]
             new_data[nz]      = obs.zero_dbz
@@ -544,8 +544,8 @@ def mrms_write_DART_ascii(obs, filename=None, obs_error=None, zero_dbz_obtype=_z
             else:
                 nz2        = len(levels) + len(zero_levels)
                 
-            new_data       = np.ma.zeros((nz2, ny, nx), dtype=np.float32)
-            new_hgts       = np.ma.zeros((nz2), dtype=np.float32)
+            new_data       = np.ma.zeros((nz2, ny, nx), dtype=float)
+            new_hgts       = np.ma.zeros((nz2), dtype=float)
             
             for n, k in enumerate(levels):
                 new_data[n,...] = data[n]
@@ -569,7 +569,7 @@ def mrms_write_DART_ascii(obs, filename=None, obs_error=None, zero_dbz_obtype=_z
         dtime   = obs.time
         
     days    = ncdf.date2num(dtime, units = "days since 1601-01-01 00:00:00")
-    seconds = np.int(86400.*(days - np.floor(days)))
+    seconds = int(86400.*(days - np.floor(days)))
 
     # Print the number of value gates
 
@@ -772,8 +772,8 @@ def write_netcdf_radar_file(ref, vel, filename=None):
 # if there is a zero dbz obs type, reform the data array 
    try:
        nx1, ny1       = ref.zero_dbz.shape
-       zero_data      = np.ma.zeros((2, ny1, nx1), dtype=np.float32)
-       zero_hgts      = np.ma.zeros((2, ny1, nx1), dtype=np.float32)
+       zero_data      = np.ma.zeros((2, ny1, nx1), dtype=float)
+       zero_hgts      = np.ma.zeros((2, ny1, nx1), dtype=float)
        zero_data[0]   = ref.zero_dbz
        zero_data[1]   = ref.zero_dbz
        zero_hgts[0:2] = ref.zero_dbz_zg[0:2]
@@ -795,7 +795,7 @@ def write_netcdf_radar_file(ref, vel, filename=None):
       
    dtime   = ncdf.num2date(ref.time['data'].mean(), ref.time['units'])
    days    = ncdf.date2num(dtime, units = "days since 1601-01-01 00:00:00")
-   seconds = np.int(86400.*(days - np.floor(days)))  
+   seconds = int(86400.*(days - np.floor(days)))  
  
 # create the fileput filename and create new netCDF4 file
 
