@@ -378,7 +378,7 @@ def assemble_3D_grid_AWS(filenames, loc=None, debug=False, dbz_name = "MergedRef
                 print("\n %d  %d" % (i0, i1))
                 print("\n %d  %d" % (j0, j1))
                 print("\n SW Lon:  %f  NE_Lon:  %f" % (f_lons[i0], f_lons[i1]))
-                print("\n SW Lat:  %f  NE_Lat:  %f" % (f_lats[j0], f_lats[j1]))
+                print("\n SW Lat:  %f  NE_Lat:  %f" % (f_lats[j1], f_lats[j0]))
                       
             g_lats    = f_lats[j0:j1:_grid_dict['obs_grid_spacing']]
             g_lons    = f_lons[i0:i1:_grid_dict['obs_grid_spacing']]
