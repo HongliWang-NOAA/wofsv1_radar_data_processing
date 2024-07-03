@@ -58,6 +58,8 @@ from pygeodesy.sphericalNvector import LatLon
 from pygeodesy.points import isenclosedBy
 
 import s3fs
+from bs4 import BeautifulSoup
+import requests, urllib
 
 # missing value
 _missing = -9999.
@@ -283,6 +285,47 @@ def Get_Closest_Elevations_AWS(anal_time, grid_dict=_grid_dict, window=_dt_windo
 
     return ObsFileList
 #=========================================================================================
+def Get_Closest_Elevations_NCEP(anal_time, grid_dict=_grid_dict, window=_dt_window):
+    """
+    get_closest_elevations_NCEP:
+        - Retrieve MRMS reflectivity obs from the NCEP realtime data feed.
+        
+        anal_time: A datetime object which is the time to center
+                   the window search on.
+        window:     len(window) == 1:  this is the window +/- of the analysis time.
+                    len(window) == 2:  the window uses analysis_time + window[0] --> analysis_time + window[1]
+                                         Note that window[0] should equal to or less than zero.
+                    window units are SECONDS
+
+    RETURNS:    Either an empty list, or a list with full file names of the radar's tilts that are
+                withn the supplied window
+
+    Added by Brian Matilla - July 2024    
+    """
+    ObsFileList = []
+    target_time = datetime.strptime(anal_time, "%Y%m%d%H%M")
+
+    start = target_time + timedelta(minutes = _dt_window[0])
+    end = target_time + timedelta(minutes = _dt_window[1])
+
+    elev_list = _grid_dict['levels']
+    for ea in elev_list:
+        print(f'Now pulling in refl data for elevation angle: {ea} from NCEP.')
+        # FIND FILES ON MRMS NOAA NCEP SERVER
+        url = f'https://mrms.ncep.noaa.gov/data/3DRefl/MergedReflectivityQC_{ea}/'
+        geturl = requests.get(url)
+        soup = BeautifulSoup(geturl.content, 'html.parser')
+        result = [grb2['href'] for grb2 in soup.find_all('a', href=True) if 'grib2.gz' in grb2['href']]
+
+        latest_file = join(url, result[-1]) # Grab latest file
+        d = datetime.strptime(latest_file[-24:-9], '%Y%m%d-%H%M%S')
+        if ((start <= d) and (d <= end)): 
+            ObsFileList.append(latest_file)
+    
+    sorted(ObsFileList)
+    
+    return ObsFileList
+#=========================================================================================
 # Decompress zipped MRMS files from AWS
 
 def load_mrms_AWS(infile):
@@ -308,7 +351,29 @@ def load_mrms_AWS(infile):
         mrms_load.close()    
         
     return mrms_load 
+#=========================================================================================
+def load_mrms_NCEP(infile):
+    """
+    Because MRMS files on NCEP are gzipped grib2 files, we must first decompress the file
+    prior to reading it.
 
+    infile: A grib2.gz file from NCEP to be read in.
+
+    RETURNS: An xarray dataset with variable information and metadata
+    """ 
+
+    #De-compress the bytes of the grib2 file and load in xarray
+    
+    response = urllib.request.urlopen(infile)
+    compressed_file = response.read()
+    
+    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=True) as f:
+        f.write(gz.decompress(compressed_file))
+        mrms_load = xr.open_mfdataset(f.name, engine='pynio', chunks=100, preprocess=lambda x: x.load())
+
+        mrms_load.close()
+
+    return mrms_load 
 #=========================================================================================
 # Extract data from the AWS files
 
@@ -403,7 +468,100 @@ def assemble_3D_grid_AWS(filenames, loc=None, debug=False, dbz_name = "MergedRef
     return Gridded_Field(filename, data = ref, field = "REFLECTIVITY", zg = g_heights, \
                          lats = g_lats, lons = g_lons, radar_hgt = 0.0, local_time = time, \
                          missingData = missingData ) 
+#=========================================================================================
+# Extract data from the NCEP files
 
+def assemble_3D_grid_NCEP(filenames, loc=None, debug=False, dbz_name = "MergedReflectivityQC", NX = 300, NY = 300):
+    """
+    This routine assembles the various elevation angle data from MRMS files being passed 
+    in to prepare it for masking application.
+
+    filenames   : list of filenames to process
+    loc         : A center lat/lon point to focus the data preparation on.
+    dbz_name    : Defaults to the standard variable name within MRMS files.
+    NX/NY       : Default grid points to use.
+
+    RETURNS:    Gridded_Field object with the MRMS data assembled into a 3-D array.    
+
+    Code applied by Brian Matilla - July 2024
+    """
+
+    levels = _grid_dict['levels']
+    nlvls  = len(levels)
+
+    for n, filename in enumerate(filenames):
+        
+        try:
+            f = load_mrms_NCEP(filename)
+        except:
+            print(f'Could not open file {filename}')
+            continue
+
+        if debug:
+            print("\n Processing file:  %s" % (filename))
+
+        if n == 0:
+            nlons  = len(f.lon_0)
+            nlats  = len(f.lat_0)
+ 
+            f_lats = f.variables['lat_0'][...]
+            f_lons = f.variables['lon_0'][...] - 360. #Convert from full 360 deg. to -180-180 hemispheres.
+
+            missingData = -99.
+            noCoverage = -999.
+            
+            time = datetime.strptime(filenames[n][-24:-9], '%Y%m%d-%H%M%S')
+
+            if loc != None:
+                ic     = get_loc(f_lons, loc[1], 0.5)[0]
+                jc     = get_loc(f_lats, loc[0], 0.5)[0]
+            else:
+                ic, jc = old_div(nlats,2), old_div(nlons,2)
+
+            i0, i1 = ic-old_div(NX,2), ic+old_div(NX,2)
+            j0, j1 = jc-old_div(NY,2), jc+old_div(NY,2)
+
+            # Fixing things when the NEWSe domain goes out of bounds
+
+            if i0 < 0:  
+                print("\n West edge of requested domain outside of MRMS grid:  %d " % (i0))
+                print("\n Adjusting indices")
+                i0       = 0
+
+            if j0 < 0:  
+                print("\n South edge of requested domain outside of MRMS grid:  %d " % (i0))
+                print("\n Adjusting indices")
+                j0       = 0
+
+            if debug:
+                print("\n %d  %d" % (i0, i1))
+                print("\n %d  %d" % (j0, j1))
+                print("\n SW Lon:  %f  NE_Lon:  %f" % (f_lons[i0], f_lons[i1]))
+                print("\n SW Lat:  %f  NE_Lat:  %f" % (f_lats[j1], f_lats[j0]))
+                      
+            g_lats    = f_lats[j0:j1:_grid_dict['obs_grid_spacing']]
+            g_lons    = f_lons[i0:i1:_grid_dict['obs_grid_spacing']]
+            array     = noCoverage * np.ones((nlvls, g_lats.size, g_lons.size))
+            g_heights = np.zeros((nlvls,))
+
+        g_heights[n] = float(filenames[n][-30:-25])*1000.    
+        
+        # APPLY a maximum 3x3 filter
+        #reffilt = np.where(f.variables[dbz_name][0,j0:j1,i0:i1] <= missingData, f.variables[dbz_name][0,j0:j1,i0:i1], ndimage.maximum_filter(f.variables[dbz_name][0,j0:j1,i0:i1], size=3, mode='constant', cval=0.0))
+
+        try:
+            array[n,...] = f.variables[dbz_name][0,j0:j1:_grid_dict['obs_grid_spacing'],i0:i1:_grid_dict['obs_grid_spacing']]
+            #array[n,...] = reffilt[::_grid_dict['obs_grid_spacing'],::_grid_dict['obs_grid_spacing']]
+        except:
+            array[n,...] = f.variables[dbz_name][j0:j1:_grid_dict['obs_grid_spacing'],i0:i1:_grid_dict['obs_grid_spacing']]
+         
+        f.close()
+ 
+    ref = ma.MaskedArray(array, mask = (array < missingData+1.))        
+    
+    return Gridded_Field(filename, data = ref, field = "REFLECTIVITY", zg = g_heights, \
+                         lats = g_lats, lons = g_lons, radar_hgt = 0.0, local_time = time, \
+                         missingData = missingData ) 
 #=========================================================================================
 # Get the filenames out of the directory
 
@@ -1004,7 +1162,7 @@ def run(options):
 
    if options.realtime != None:
 
-       in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
+       in_filenames = Get_Closest_Elevations_NCEP(a_time, _grid_dict, _dt_window)
 
        try:
            print("\n Prep_MRMS:  RealTime FLAG is true number of levels found:  %s\n" % (len(in_filenames)))
@@ -1019,7 +1177,7 @@ def run(options):
            return 1
 
    else:
-       in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
+       in_filenames = Get_Closest_Elevations_NCEP(a_time, _grid_dict, _dt_window)
        out_filenames = []
        print("\n Prep_MRMS:  Processing %d files in the directory:  %s\n" % (len(in_filenames), options.dir))
        print("\n Prep_MRMS:  First file is %s\n" % (in_filenames[0]))
@@ -1061,7 +1219,7 @@ def run(options):
    NX = int(len(wlat[0,:,0])*(wrfin.getncattr('DX')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
    NY = int(len(wlat[0,0,:])*(wrfin.getncattr('DY')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
 
-   ref_obj = assemble_3D_grid_AWS(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
+   ref_obj = assemble_3D_grid_NCEP(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
    ref_obj.time = a_time
    ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], wlat=wlat, wlon=wlon) #cloc=options.loc
 

@@ -17,6 +17,7 @@ dependencies:
   - basemap-data-hires=1.3.2
   - pynio=1.5.5
   - s3fs
+  - beautifulsoup4
   - future
   - pip:
     - pygeodesy
