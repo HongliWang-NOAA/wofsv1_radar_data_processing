@@ -311,21 +311,32 @@ def Get_Closest_Elevations_NCEP(anal_time, grid_dict=_grid_dict, window=_dt_wind
 
     elev_list = _grid_dict['levels']
     for ea in elev_list:
+        valid_files = []
         print(f'Now pulling in refl data for elevation angle: {ea} from NCEP.')
         # FIND FILES ON MRMS NOAA NCEP SERVER
         url = f'https://mrms.ncep.noaa.gov/data/3DRefl/MergedReflectivityQC_{ea}/'
         geturl = requests.get(url)
         soup = BeautifulSoup(geturl.content, 'html.parser')
-        result = [grb2['href'] for grb2 in soup.find_all('a', href=True) if 'grib2.gz' in grb2['href']]
+        result = [grb2['href'] for grb2 in soup.find_all('a', href=True) if 'grib2.gz' in grb2['href']][2::] # Skip header info
 
-        latest_file = os.path.join(url, result[-1]) # Grab latest file
-        d = datetime.strptime(latest_file[-24:-9], '%Y%m%d-%H%M%S')
-        if ((start <= d) and (d <= end)): 
-            ObsFileList.append(latest_file)
-    
-    sorted(ObsFileList)
-    
+        for v in result:
+            m = re.match('^MRMS_MergedReflectivityQC_[0,1][0-9].[0,5][0]_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})-(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2}).grib2.gz', v.split('/')[-1])
+
+            if m != None:
+                d = datetime.strptime(m.group('year') + m.group('month') + m.group('day') + '-' + m.group('hour') + m.group('minute') + m.group('second'), "%Y%m%d-%H%M%S")
+            
+            if start <= d and d <= end:
+                valid_files.append((d, abs((target_time - d).total_seconds()), v.split('/')[-1]))
+        # sort the files
+        sorted_files = sorted(valid_files, key = itemgetter(1))
+
+        # top (most recent within time block) to download
+        file_to_download = next(iter(sorted_files))[2]
+
+        ObsFileList.append(url+file_to_download)
+
     return ObsFileList
+                     
 #=========================================================================================
 # Decompress zipped MRMS files from AWS
 
