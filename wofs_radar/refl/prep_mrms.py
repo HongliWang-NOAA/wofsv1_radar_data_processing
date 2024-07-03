@@ -303,7 +303,8 @@ def Get_Closest_Elevations_NCEP(anal_time, grid_dict=_grid_dict, window=_dt_wind
     Added by Brian Matilla - July 2024    
     """
     ObsFileList = []
-    target_time = datetime.strptime(anal_time, "%Y%m%d%H%M")
+#    target_time = datetime.strptime(anal_time, "%Y%m%d%H%M")
+    target_time = anal_time
 
     start = target_time + timedelta(minutes = _dt_window[0])
     end = target_time + timedelta(minutes = _dt_window[1])
@@ -317,7 +318,7 @@ def Get_Closest_Elevations_NCEP(anal_time, grid_dict=_grid_dict, window=_dt_wind
         soup = BeautifulSoup(geturl.content, 'html.parser')
         result = [grb2['href'] for grb2 in soup.find_all('a', href=True) if 'grib2.gz' in grb2['href']]
 
-        latest_file = join(url, result[-1]) # Grab latest file
+        latest_file = os.path.join(url, result[-1]) # Grab latest file
         d = datetime.strptime(latest_file[-24:-9], '%Y%m%d-%H%M%S')
         if ((start <= d) and (d <= end)): 
             ObsFileList.append(latest_file)
