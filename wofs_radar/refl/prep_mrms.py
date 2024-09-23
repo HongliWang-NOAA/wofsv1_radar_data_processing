@@ -715,6 +715,10 @@ def dbz_masking(ref, thin_zeros=2, cloc=None, wlat = None, wlon = None):
 
     print(" Number of zeros in the field after compositive ref mask:  %d\n " % (np.sum(zero_dbz.mask==False)))
 
+    zero_dbz.mask[ ref.temp <= -999. ] = True
+
+    print(" Number of zeros in the field after no coverage ref mask:  %d\n " % (np.sum(zero_dbz.mask==False)))
+  
     raw_field = np.where(ref.composite < _grid_dict['min_dbz_zeros'], 0.0, ref.composite)
 
     hhalo = _grid_dict['halo_footprint']
