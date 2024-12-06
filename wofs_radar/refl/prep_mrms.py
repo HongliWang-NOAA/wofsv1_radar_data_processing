@@ -261,6 +261,7 @@ def Get_Closest_Elevations_AWS(anal_time, grid_dict=_grid_dict, window=_dt_windo
     for ea in elev_list:
         valid_files = []
         # FIND FILES ON AMAZON SERVER
+        print(f'Now pulling in refl data for elevation angle: {ea} from AWS.')
         fs = s3fs.S3FileSystem(anon=True)
         path = f'noaa-mrms-pds/CONUS/MergedReflectivityQC_{ea}/{target_time:%Y%m%d}/'
 
@@ -408,12 +409,13 @@ def assemble_3D_grid_AWS(filenames, loc=None, debug=False, dbz_name = "MergedRef
     nlvls  = len(levels)
 
     for n, filename in enumerate(filenames):
-        
-        try:
-            f = load_mrms_AWS(filename)
-        except:
-            print(f'Could not open file {filename}')
-            continue
+ 
+        f = load_mrms_AWS(filename)       
+#        try:
+#            f = load_mrms_AWS(filename)
+#        except:
+#            print(f'Could not open file {filename}')
+#            continue
 
         if debug:
             print("\n Processing file:  %s" % (filename))
@@ -503,11 +505,12 @@ def assemble_3D_grid_NCEP(filenames, loc=None, debug=False, dbz_name = "MergedRe
 
     for n, filename in enumerate(filenames):
         
-        try:
-            f = load_mrms_NCEP(filename)
-        except:
-            print(f'Could not open file {filename}')
-            continue
+        f = load_mrms_NCEP(filename)
+#        try:
+#            f = load_mrms_NCEP(filename)
+#        except:
+#            print(f'Could not open file {filename}')
+#            continue
 
         if debug:
             print("\n Processing file:  %s" % (filename))
@@ -1178,12 +1181,16 @@ def run(options):
 
    if options.realtime != None:
 
-       in_filenames = Get_Closest_Elevations_NCEP(a_time, _grid_dict, _dt_window)
+       try:
+           in_filenames = Get_Closest_Elevations_NCEP(a_time, _grid_dict, _dt_window)
+       except:
+           print("\n Prep_MRMS: NCEP data unavailable. Attempting with AWS")
+           in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
 
        try:
-           print("\n Prep_MRMS:  RealTime FLAG is true number of levels found:  %s\n" % (len(in_filenames)))
-           print("\n Prep_MRMS:  RealTime FLAG is true processing first file:  %s\n" % (in_filenames[0]))
-           print(" Prep_MRMS:  RealTime FLAG is true processing last file:  %s\n" % (in_filenames[-1]))
+           print("\n Prep_MRMS:  number of levels found:  %s\n" % (len(in_filenames)))
+           print("\n Prep_MRMS:  processing first file:  %s\n" % (in_filenames[0]))
+           print(" Prep_MRMS:  processing last file:  %s\n" % (in_filenames[-1]))
            rlt_filename = "%s_%s" % ("obs_seq_RF", a_time.strftime("%Y%m%d_%H%M"))
        except:
            print("\n============================================================================")
@@ -1193,7 +1200,7 @@ def run(options):
            return 1
 
    else:
-       in_filenames = Get_Closest_Elevations_NCEP(a_time, _grid_dict, _dt_window)
+       in_filenames = Get_Closest_Elevations_AWS(a_time, _grid_dict, _dt_window)
        out_filenames = []
        print("\n Prep_MRMS:  Processing %d files in the directory:  %s\n" % (len(in_filenames), options.dir))
        print("\n Prep_MRMS:  First file is %s\n" % (in_filenames[0]))
@@ -1235,7 +1242,11 @@ def run(options):
    NX = int(len(wlat[0,:,0])*(wrfin.getncattr('DX')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
    NY = int(len(wlat[0,0,:])*(wrfin.getncattr('DY')/1000.)*1.4)     # Factor of 1.4 applied to account for northern U.S. clipping
 
-   ref_obj = assemble_3D_grid_NCEP(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
+   try:
+       ref_obj = assemble_3D_grid_NCEP(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
+   except:
+       ref_obj = assemble_3D_grid_AWS(in_filenames, loc=options.loc, debug=_debug, dbz_name=options.refl_var_name, NX = NX, NY = NY)
+
    ref_obj.time = a_time
    ref_obj = dbz_masking(ref_obj, thin_zeros=_grid_dict['thin_zeros'], wlat=wlat, wlon=wlon) #cloc=options.loc
 
