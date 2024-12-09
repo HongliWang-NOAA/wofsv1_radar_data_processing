@@ -42,8 +42,8 @@ if __name__ == "__main__":
     settings = AppConfiguration.load(options.file)
 
     if settings.default_parallel:
-#        print('Running in parallel mode')
-#        with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
+        print('Running in parallel mode')
+        with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
             refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
             pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain, options.realtime))
 
