@@ -20,5 +20,5 @@ dependencies:
   - beautifulsoup4
   - future
   - pip:
-    - pygeodesy
+    - pygeodesy==24.9.29
     - pint==0.19
