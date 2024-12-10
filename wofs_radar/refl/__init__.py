@@ -3,7 +3,7 @@ import types, os
 from ..Config import AppConfiguration
 from .prep_mrms import run
 
-def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config_file: str, domain_file: str):
+def run_refl_for_radar_time(start_time: datetime, lon: float, lat: float, config_file: str, domain_file: str, realtime: str):
     settings = AppConfiguration.load(config_file)
 
     obj = types.SimpleNamespace()

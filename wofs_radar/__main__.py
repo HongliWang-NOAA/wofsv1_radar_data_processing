@@ -32,6 +32,7 @@ if __name__ == "__main__":
     parser.add_option("-x", "--longitude",   dest="lon", default = None)
     parser.add_option("-f", "--file",   dest="file", default = None)
     parser.add_option("-d", "--domain",   dest="domain", default = None)
+    parser.add_option("-p", "--realtime",   dest="realtime", default = None)
 
     (options, args) = parser.parse_args()
 
@@ -44,7 +45,7 @@ if __name__ == "__main__":
         print('Running in parallel mode')
         with Pool(processes=len(radars)+1, maxtasksperchild=1) as pool:
             refl_func = partial(__abortable_worker__, run_refl_for_radar_time, timeout=360)
-            pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain))
+            pool.apply_async(refl_func, args = (run_time, float(options.lon), float(options.lat), options.file, options.domain, options.realtime))
 
             for name in radars:
                 abortable_func = partial(__abortable_worker__, run_vr_for_radar_time, timeout=360)
@@ -54,7 +55,7 @@ if __name__ == "__main__":
             pool.join()   
     else:
         print('Running in serial mode')
-        run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file, options.domain)
+        run_refl_for_radar_time(run_time, float(options.lon), float(options.lat), options.file, options.domain, options.realtime)
         for name in radars:
             run_vr_for_radar_time(run_time, name, float(options.lon), float(options.lat), options.file, options.domain)    
 
