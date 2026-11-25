@@ -284,10 +284,10 @@ def runwdssii(radar,startdate,inloc,outloc,soundingloc,prefix):
 
 def main():
 
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 7):
         print(
-            "Usage: python script.py "
-            "startdate inloc outloc soundingloc prefix"
+            "Usage: python runwdss.py "
+            "startdate inloc outloc soundingloc prefix [radar]"
         )
         return 1
 
@@ -299,9 +299,22 @@ def main():
     soundingloc = args[4]
     prefix = args[5]
 
-    # Get radar names in alphabetical order
-    radars = sorted(os.listdir(inloc))
+    # Use specified radar if provided; otherwise process all radars
+    if len(args) == 7:
+        #radars = [r.strip() for r in args[6].split(",") if r.strip()]
+        radar = args[6]
 
+        if not os.path.isdir(os.path.join(inloc, radar)):
+            print(f"Error: radar '{radar}' not found in {inloc}")
+            return 1
+
+        radars = [radar]
+    else:
+        # Default behavior: process all radars alphabetically
+        radars = sorted(
+            name for name in os.listdir(inloc)
+            if os.path.isdir(os.path.join(inloc, name))
+        )
     print(f"Input location: {inloc}")
     print(f"Radars found: {radars}")
 
